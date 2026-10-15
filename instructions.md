@@ -1,17 +1,15 @@
 # Guía de Instalación y Ejecución Paso a Paso
-## Sistema de Microservicios E-Commerce Farmacéutico (Inkafarma)
+## Sistema de Microservicios E-Commerce Farmacéutico
 
 Este documento contiene las instrucciones precisas para configurar la base de datos MySQL, aplicar las migraciones con Alembic, levantar los 3 microservicios independientes en FastAPI y ejecutar la aplicación Frontend con React y Tailwind CSS v3.
 
 ---
 
-### ⚠️ Diagnóstico Obligatorio del Intérprete Python
+### 📋 Requisitos Previos
 
-En su sistema Windows se detectaron dos instalaciones de Python:
-- `python` apunta a **Python 2.7.15** (`C:\BioTime\Python27\python.exe`)
-- `python3` apunta a **Python 3.13.14** (`C:\Users\willd\AppData\Local\Microsoft\WindowsApps\python3.exe`)
-
-> **Regla de oro:** Todos los comandos de Python deben ejecutarse utilizando **`python3`** (o el entorno virtual activado), nunca `python`.
+- **Python 3.10 o superior** (verificar con `python --version` o `python3 --version`)
+- **MySQL Server 8.0+**
+- **Node.js 18+** (para el frontend)
 
 ---
 
@@ -21,7 +19,7 @@ Abra PowerShell en la carpeta raíz del proyecto (`app_microservicios`):
 
 ```powershell
 # 1. Crear el entorno virtual con Python 3
-python3 -m venv venv
+python -m venv venv   # O use python3 según corresponda en su sistema
 
 # 2. Activar el entorno virtual en PowerShell
 .\venv\Scripts\Activate.ps1
