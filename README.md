@@ -1,15 +1,13 @@
 # Sistema de Comercio Electrónico Farmacéutico
 ## Arquitectura de Microservicios con FastAPI, SQLAlchemy, MySQL y React
 
-Este proyecto académico implementa un sistema distribuido de comercio electrónico para una cadena farmacéutica, diseñado bajo el patrón arquitectónico **Database-per-Service** (cada microservicio cuenta con su propio esquema de base de datos aislado e independiente).
+Este proyecto implementa una plataforma distribuida de comercio electrónico farmacéutico bajo el patrón arquitectónico **Database-per-Service**, donde cada microservicio gestiona su propio esquema de base de datos de forma desacoplada e independiente.
 
 ---
 
-## 🎯 Objetivo y Funcionamiento del Sistema
+## 🎯 Visión General de la Arquitectura
 
-El propósito de este proyecto es simular el ciclo completo de una tienda farmacéutica en línea (catálogo de medicamentos, registro y autenticación de clientes, y procesamiento seguro de pedidos con validación de inventario en tiempo real).
-
-A diferencia de una aplicación monolítica tradicional donde todo comparte una única base de datos, aquí el sistema se divide en **3 servicios backend autónomos** que se comunican mediante peticiones HTTP, complementados por un **Frontend moderno en React y Tailwind CSS**:
+El sistema modela el flujo comercial de una farmacia en línea: gestión de inventario y catálogo de medicamentos, registro y autenticación de usuarios, y procesamiento de órdenes de compra con validación de stock en tiempo real mediante comunicación inter-servicio síncrona.
 
 ```mermaid
 graph TD
@@ -33,94 +31,91 @@ graph TD
         OrderApp --> DBOrder
     end
 
-    Client -->|1. Listar Medicamentos| CatApp
-    Client -->|2. Registrarse / Iniciar Sesión| UserApp
-    Client -->|3. Crear Pedido de Compra| OrderApp
+    Client -->|1. Consulta de Catálogo| CatApp
+    Client -->|2. Autenticación y Registro| UserApp
+    Client -->|3. Creación de Pedido| OrderApp
 
-    OrderApp -.->|4. HTTPX Síncrono: Consulta GET /products/:id<br/>Verifica existencia y disponibilidad de stock| CatApp
+    OrderApp -.->|4. HTTPX Síncrono: GET /products/:id<br/>Valida existencia y disponibilidad de stock| CatApp
 ```
 
 ---
 
-## 🧩 Detalle de Módulos y Lógica Interna
+## 🧩 Arquitectura de Módulos y Lógica de Negocio
 
-Para facilitar la comprensión del equipo y la sustentación académica, a continuación se describe qué función cumple cada microservicio y cómo interactúan entre sí:
+A continuación se detalla la responsabilidad de cada servicio, su modelo de datos y los flujos de comunicación del sistema:
 
 ### 1. Microservicio de Catálogo (`catalog_service` - Puerto 8001)
-- **Propósito:** Administrar el inventario farmacéutico, las familias o categorías de medicamentos y los precios vigentes.
-- **Base de Datos Exclusiva:** `db_catalogo_inka`.
+- **Responsabilidad:** Administrar el inventario farmacéutico, las categorías de productos y los precios vigentes.
+- **Base de Datos:** `db_catalogo_inka`.
 - **Modelos ORM:**
   - `Category`: Identificador, nombre de la categoría (ej. *Analgésicos*, *Cuidado Personal*, *Vitaminas*) y descripción.
-  - `Product`: Identificador, nombre comercial y presentación (ej. *Paracetamol 500mg - Caja 20 tabletas*), descripción médica, precio unitario, stock disponible y categoría referenciada.
-- **Endpoints Clave:**
-  - `POST /categories/`: Creación de nuevas categorías.
-  - `GET /categories/`: Listado completo de categorías para navegación.
-  - `POST /products/`: Ingreso de nuevos medicamentos al catálogo.
-  - `GET /products/`: Listado paginado de productos para la tienda virtual.
-  - `GET /products/{id}`: **Endpoint fundamental para otros microservicios**. Es el canal por el cual el microservicio de pedidos consulta el stock y precio oficial de un producto sin acceder a la base de datos de catálogo directamente.
+  - `Product`: Identificador, nombre comercial y presentación (ej. *Paracetamol 500mg - Caja 20 tabletas*), descripción médica, precio unitario, stock disponible y referencia a la categoría.
+- **Endpoints:**
+  - `POST /categories/`: Registro de nuevas categorías.
+  - `GET /categories/`: Listado completo de categorías.
+  - `POST /products/`: Registro de nuevos productos en el catálogo.
+  - `GET /products/`: Listado paginado de productos con soporte para filtros.
+  - `GET /products/{id}`: Consulta individual por ID de producto (consumido externamente y por el servicio de pedidos).
 
 ---
 
 ### 2. Microservicio de Usuarios y Autenticación (`users_service` - Puerto 8002)
-- **Propósito:** Gestionar el registro de clientes, la seguridad de las cuentas y la emisión de tokens de sesión.
-- **Base de Datos Exclusiva:** `db_usuarios_inka`.
+- **Responsabilidad:** Gestionar las cuentas de clientes, la seguridad de las contraseñas y la emisión de credenciales de sesión.
+- **Base de Datos:** `db_usuarios_inka`.
 - **Modelo ORM:**
-  - `User`: ID, nombre completo, email único, hash de contraseña, dirección de entrega y teléfono de contacto.
-- **Lógica de Seguridad Interna:**
-  - **Encriptación Unidireccional con Bcrypt:** Las contraseñas nunca se guardan en texto plano; se procesan mediante un algoritmo de hashing con salt antes de persistirlas.
-  - **JSON Web Tokens (JWT):** Al iniciar sesión correctamente, el servicio genera un token firmado (HMAC-SHA256) con expiración configurable que autentica la identidad del usuario ante el sistema.
-- **Endpoints Clave:**
-  - `POST /auth/register`: Registro de nuevos clientes con hasheo automático de contraseña.
-  - `POST /auth/login`: Validación de credenciales y generación del token JWT.
-  - `GET /users/{id}`: Consulta de datos de cliente para despacho y facturación.
+  - `User`: ID, nombre completo, email único, hash de contraseña, dirección de entrega y teléfono.
+- **Seguridad:**
+  - **Hashing con Bcrypt:** Las contraseñas se almacenan procesadas mediante funciones hash unidireccionales con salt aleatorio.
+  - **JSON Web Tokens (JWT):** Autenticación basada en tokens estándar HMAC-SHA256 con tiempo de expiración definido.
+- **Endpoints:**
+  - `POST /auth/register`: Registro de nuevos usuarios con cifrado automático de credenciales.
+  - `POST /auth/login`: Validación de credenciales y retorno de token JWT y datos de usuario.
+  - `GET /users/{id}`: Consulta de perfil de usuario.
 
 ---
 
 ### 3. Microservicio de Pedidos / Órdenes (`orders_service` - Puerto 8003)
-- **Propósito:** Recibir y procesar los pedidos de compra de los clientes, garantizando la consistencia del negocio antes de asentar una venta.
-- **Base de Datos Exclusiva:** `db_pedidos_inka`.
+- **Responsabilidad:** Recepción y procesamiento de compras, asegurando la consistencia transaccional del stock antes de asentar una orden.
+- **Base de Datos:** `db_pedidos_inka`.
 - **Modelos ORM:**
   - `Order`: ID, usuario ID, monto total liquidado, estado (`PENDING`, `COMPLETED`, `CANCELLED`) y fecha de creación.
-  - `OrderItem`: ID, orden ID, producto ID, cantidad solicitada y precio unitario congelado al momento de la compra.
-- **Comunicación Inter-servicio Síncrona con HTTPX:**
-  - Cuando el cliente envía una solicitud para crear un pedido (`POST /orders/`), este microservicio no puede leer la tabla de productos porque pertenece a otra base de datos.
-  - Por ello, utiliza el cliente HTTP **`HTTPX`** para consultar en tiempo real al Microservicio de Catálogo:
+  - `OrderItem`: ID, orden ID, producto ID, cantidad solicitada y precio unitario registrado al momento de la transacción.
+- **Comunicación Inter-servicio (HTTPX Síncrono):**
+  - Al recibir una solicitud `POST /orders/`, el servicio consulta en tiempo real al Microservicio de Catálogo:
     `GET http://localhost:8001/products/{product_id}`
-  - **Reglas de Negocio Validadas:**
-    1. **Existencia:** Si el producto no existe en el catálogo, el pedido se rechaza con `HTTP 404 Not Found`.
-    2. **Stock Suficiente:** Si el cliente solicita más unidades de las que hay en stock, el pedido se rechaza con `HTTP 400 Bad Request`, indicando el stock disponible real.
-    3. **Cálculo de Monto Total:** Si todos los medicamentos son válidos, se calcula el importe sumando `cantidad * precio_unitario` y se persiste la orden con estado `COMPLETED`.
-    4. **Tolerancia a Fallos:** Si el servicio de catálogo se encuentra apagado, el servicio captura la excepción y retorna un mensaje controlado `HTTP 503 Service Unavailable`.
-- **Endpoints Clave:**
-  - `POST /orders/`: Recepción de la orden, validación con el catálogo y asentamiento en base de datos.
-  - `GET /orders/{id}`: Consulta de detalles y estado de una orden específica.
-  - `GET /orders/`: Listado histórico de pedidos.
+  - **Validaciones de negocio ejecutadas:**
+    1. **Existencia:** Si el producto no existe en el catálogo, retorna `HTTP 404 Not Found`.
+    2. **Stock:** Si la cantidad requerida supera el inventario disponible, retorna `HTTP 400 Bad Request` informando las unidades disponibles.
+    3. **Cálculo de Importes:** Se computa `cantidad * precio_unitario` por cada ítem y se asienta la orden con estado `COMPLETED`.
+    4. **Resiliencia:** Si el servicio de catálogo no responde, se maneja el error con `HTTP 503 Service Unavailable`.
+- **Endpoints:**
+  - `POST /orders/`: Validación con catálogo y registro de la orden.
+  - `GET /orders/{id}`: Consulta de orden y sus ítems asociados.
+  - `GET /orders/`: Listado de órdenes registradas.
 
 ---
 
-### 4. Aplicación Frontend (`frontend` - Puerto 5173)
-- **Propósito:** Tienda virtual farmacéutica construida con **React, Vite y Tailwind CSS v3**.
-- **Funcionalidades:**
-  - Catálogo de productos con filtros por categoría y buscador dinámico.
-  - Indicadores de stock con alertas (*"En stock"*, *"Últimas unidades"*, *"Agotado"*).
-  - Modal de autenticación con inicio de sesión y registro de clientes.
-  - Carrito de compras deslizante que consume el microservicio de órdenes y muestra la confirmación de la transacción en tiempo real.
-  - Monitor en vivo que muestra con indicadores verdes/rojos el estado de salud de los 3 microservicios backend.
+### 4. Cliente Web Frontend (`frontend` - Puerto 5173)
+- **Tecnología:** React + Vite + Tailwind CSS v3.
+- **Componentes y Capacidades:**
+  - Vista de productos con filtrado reactivo por categorías y búsqueda por texto.
+  - Indicadores de stock en tiempo real (*"En stock"*, *"Últimas unidades"*, *"Agotado"*).
+  - Modal de autenticación para login y registro de clientes con almacenamiento seguro de tokens.
+  - Carrito de compras deslizante con integración directa hacia el endpoint de órdenes.
+  - Panel superior con monitoreo de disponibilidad para los 3 puertos backend.
 
 ---
 
 ## 💻 Requisitos del Sistema
 
-Para ejecutar este proyecto se requiere contar con las siguientes herramientas instaladas:
+- **Python 3.10+** (compatible con 3.11, 3.12 y 3.13)
+- **MySQL Server 8.0+** o MariaDB
+- **Node.js 18+** y **npm**
+- **Git**
 
-- **Python 3.10 o superior** (probado y compatible hasta Python 3.13)
-- **MySQL Server 8.0+** o MariaDB (puede usarse XAMPP, MySQL Workbench, Docker o servicio local)
-- **Node.js 18+** y **npm** (para levantar la aplicación frontend)
-- **Git** (para control de versiones)
-
-Verifique sus versiones ejecutando en consola:
+Comandos de verificación:
 ```powershell
-python --version   # O python3 --version dependiendo de su configuración
+python --version   # O python3 según la configuración del sistema
 mysql --version
 node -v
 ```
@@ -132,113 +127,101 @@ node -v
 ```text
 app_microservicios/
 │
-├── init_db.sql                     # Script SQL para crear las 3 bases de datos en MySQL
-├── seed_data.sql                   # Datos de prueba iniciales (medicamentos, categorías, stock)
-├── requirements.txt                # Dependencias de Python (FastAPI, SQLAlchemy, Alembic, etc.)
-├── README.md                       # Documentación principal del sistema
-├── instructions.md                 # Guía paso a paso de comandos de instalación y ejecución
+├── init_db.sql                     # Script para creación de las 3 bases de datos en MySQL
+├── seed_data.sql                   # Datos iniciales de prueba (categorías, productos, usuario)
+├── requirements.txt                # Dependencias Python del backend
+├── README.md                       # Especificación técnica del proyecto
+├── instructions.md                 # Guía de instalación y comandos
 │
-├── catalog_service/                # MICROSERVICIO 1: Catálogo (Puerto 8001)
-│   ├── .env.example                # Plantilla de variables de entorno (db_catalogo_inka)
-│   ├── database.py                 # Conexión SQLAlchemy y generador get_db()
-│   ├── models.py                   # Modelos Category y Product
-│   ├── schemas.py                  # Esquemas de validación Pydantic
-│   ├── main.py                     # API FastAPI y Endpoints Swagger
-│   ├── alembic.ini                 # Configuración de migraciones
-│   └── alembic/                    # Historial de versiones de migración
-│
-├── users_service/                  # MICROSERVICIO 2: Usuarios y Autenticación (Puerto 8002)
-│   ├── .env.example                # Plantilla de variables de entorno (db_usuarios_inka)
-│   ├── database.py                 # Conexión SQLAlchemy
-│   ├── models.py                   # Modelo User
-│   ├── security.py                 # Hashing Bcrypt y generación de tokens JWT
-│   ├── schemas.py                  # Esquemas Pydantic para registro y login
-│   ├── main.py                     # API FastAPI y Endpoints de autenticación
-│   ├── alembic.ini
+├── catalog_service/                # Servicio de Catálogo (Puerto 8001)
+│   ├── .env.example
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── main.py
 │   └── alembic/
 │
-├── orders_service/                 # MICROSERVICIO 3: Pedidos / Órdenes (Puerto 8003)
-│   ├── .env.example                # Plantilla de variables de entorno (db_pedidos_inka)
-│   ├── database.py                 # Conexión SQLAlchemy
-│   ├── models.py                   # Modelos Order y OrderItem
-│   ├── client.py                   # Cliente HTTP síncrono (HTTPX) hacia Catálogo (:8001)
-│   ├── schemas.py                  # Esquemas Pydantic de pedidos
-│   ├── main.py                     # API FastAPI y lógica de validación de órdenes
-│   ├── alembic.ini
+├── users_service/                  # Servicio de Usuarios y Auth (Puerto 8002)
+│   ├── .env.example
+│   ├── database.py
+│   ├── models.py
+│   ├── security.py
+│   ├── schemas.py
+│   ├── main.py
 │   └── alembic/
 │
-├── frontend/                       # APLICACIÓN CLIENTE WEB (Puerto 5173)
-│   ├── src/                        # Código fuente React + Tailwind CSS v3
-│   ├── package.json                # Dependencias Node.js
-│   └── vite.config.js              # Configuración de empaquetado Vite
+├── orders_service/                 # Servicio de Pedidos (Puerto 8003)
+│   ├── .env.example
+│   ├── database.py
+│   ├── models.py
+│   ├── client.py                   # Cliente HTTPX para comunicación con Catálogo
+│   ├── schemas.py
+│   ├── main.py
+│   └── alembic/
 │
-└── Scripts de Lanzamiento Rápido:
-    ├── run_all.bat / run_all.ps1       # Levanta los 3 microservicios y el frontend con un solo clic
-    ├── run_catalog.bat / .ps1          # Levanta únicamente el Catálogo (:8001)
-    ├── run_users.bat / .ps1            # Levanta únicamente Usuarios (:8002)
-    ├── run_orders.bat / .ps1           # Levanta únicamente Pedidos (:8003)
-    └── run_frontend.bat                # Levanta el servidor web del Frontend (:5173)
+├── frontend/                       # Cliente Web React (Puerto 5173)
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.js
+│
+└── Scripts de Ejecución:
+    ├── run_all.bat / run_all.ps1       # Levanta todos los servicios concurrentemente
+    ├── run_catalog.bat / .ps1          # Levanta Catálogo (:8001)
+    ├── run_users.bat / .ps1            # Levanta Usuarios (:8002)
+    ├── run_orders.bat / .ps1           # Levanta Pedidos (:8003)
+    └── run_frontend.bat                # Levanta Frontend (:5173)
 ```
 
 ---
 
-## 🚀 Guía de Instalación y Ejecución
+## 🚀 Puesta en Marcha
 
-### 1. Configuración de Base de Datos en MySQL
-Asegúrese de que su servidor MySQL esté en ejecución. Ejecute los siguientes scripts:
+### 1. Configuración de Base de Datos
+Ejecutar en MySQL los scripts de preparación:
+1. [`init_db.sql`](file:///c:/Users/willd/OneDrive/Desktop/workspace/app_microservicios/init_db.sql): Genera los esquemas `db_catalogo_inka`, `db_usuarios_inka` y `db_pedidos_inka`.
+2. [`seed_data.sql`](file:///c:/Users/willd/OneDrive/Desktop/workspace/app_microservicios/seed_data.sql): Carga categorías, medicamentos con stock inicial y un usuario de prueba.
 
-1. [`init_db.sql`](file:///c:/Users/willd/OneDrive/Desktop/workspace/app_microservicios/init_db.sql): Crea las tres bases de datos (`db_catalogo_inka`, `db_usuarios_inka`, `db_pedidos_inka`).
-2. [`seed_data.sql`](file:///c:/Users/willd/OneDrive/Desktop/workspace/app_microservicios/seed_data.sql): Inserta categorías de ejemplo, medicamentos con stock y un usuario de prueba.
-
-### 2. Entorno Virtual de Python y Dependencias
-En la raíz del proyecto (`app_microservicios`):
-
+### 2. Entorno Virtual de Python
+Desde la raíz del proyecto (`app_microservicios`):
 ```powershell
-# Crear entorno virtual
-python -m venv venv   # O use python3 según corresponda en su sistema
-
-# Activar entorno virtual en Windows PowerShell
+python -m venv venv
 .\venv\Scripts\Activate.ps1
-
-# Instalar librerías requeridas
 pip install -r requirements.txt
 ```
 
 ### 3. Variables de Entorno (.env)
-Cada microservicio cuenta con un archivo `.env` configurado. Si su usuario o contraseña de MySQL son diferentes a los predeterminados (`root` / `1234`), modifíquelos en:
+Asegurar que los archivos `.env` de cada microservicio contengan las credenciales correctas de MySQL (`root` / `1234` por defecto):
 - `catalog_service/.env`
 - `users_service/.env`
 - `orders_service/.env`
 
 ---
 
-## ⚡ Cómo Iniciar el Sistema Completo
+## ⚡ Ejecución del Sistema
 
-### Opción Rápida (1 solo clic)
-Estando en la carpeta raíz del proyecto, ejecute:
-
+### Modo Automatizado
+Para levantar los tres microservicios y el cliente web en terminales independientes:
 ```powershell
 .\run_all.bat
 ```
-*(O haga doble clic en el archivo `run_all.bat` desde el Explorador de Windows).*
 
-Este script abrirá 4 terminales independientes:
-- **Catálogo:** [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
-- **Usuarios:** [http://127.0.0.1:8002/docs](http://127.0.0.1:8002/docs)
-- **Pedidos:** [http://127.0.0.1:8003/docs](http://127.0.0.1:8003/docs)
-- **Frontend Web:** [http://localhost:5173](http://localhost:5173)
+Servicios disponibles:
+- **Catálogo API:** [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+- **Usuarios API:** [http://127.0.0.1:8002/docs](http://127.0.0.1:8002/docs)
+- **Pedidos API:** [http://127.0.0.1:8003/docs](http://127.0.0.1:8003/docs)
+- **Cliente Web:** [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## 🧪 Demostración y Pruebas del Flujo Inter-servicio
+## 🧪 Flujo de Validación Inter-servicio
 
-Para sustentar académicamente el funcionamiento de la arquitectura:
+Para verificar la integración entre componentes:
 
-1. **Abra el Frontend Web:** Ingrese a [http://localhost:5173](http://localhost:5173).
-2. **Observe la barra superior:** Verifique que los tres indicadores de estado de los microservicios (:8001, :8002, :8003) estén en color verde.
-3. **Inicie sesión:** Haga clic en *"Iniciar Sesión"* y utilice el botón de prueba para autenticar al usuario (el servicio en el puerto 8002 validará las credenciales y emitirá el JWT).
-4. **Agregue medicamentos al carrito:** Seleccione la cantidad deseada de medicamentos cargados desde el catálogo (:8001).
-5. **Procese la compra:** Abra el carrito y haga clic en *"Procesar Orden de Compra"*.
-   - El microservicio de pedidos (:8003) llamará síncronamente vía HTTPX al microservicio de catálogo (:8001) para certificar stock.
-   - Si es exitoso, la orden quedará asentada y se mostrará la ventana con el código de confirmación.
-6. **Pruebe las validaciones de fallo:** Intente ordenar una cantidad superior al stock visible; observará que el sistema bloquea la transacción informando el stock disponible real.
+1. **Acceder a la Interfaz Web:** [http://localhost:5173](http://localhost:5173).
+2. **Verificar Estado:** Los indicadores del encabezado deben figurar activos en verde para los tres microservicios.
+3. **Autenticación:** Iniciar sesión con un usuario registrado (el servicio `:8002` valida la contraseña contra su hash y retorna el JWT).
+4. **Selección de Productos:** Agregar medicamentos del catálogo (`:8001`) al carrito de compra.
+5. **Confirmación de Orden:** Procesar la compra desde el carrito.
+   - El servicio `:8003` consulta síncronamente a `:8001` mediante HTTPX para validar stock.
+   - Confirmada la disponibilidad, se emite el identificador de orden y se actualiza el inventario.
+6. **Manejo de Errores:** Al solicitar cantidades superiores al stock disponible, el servicio de pedidos bloquea la transacción y retorna el detalle del error (`HTTP 400`).
