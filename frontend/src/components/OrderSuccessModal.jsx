@@ -6,10 +6,10 @@ export default function OrderSuccessModal({ order, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden animate-fade-in">
-        {/* Cabecera exitosa */}
-        <div className="p-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white text-center">
-          <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-white/20 flex items-center justify-center">
+      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-emerald-100 overflow-hidden animate-fade-in">
+        {/* Cabecera exitosa con Verde Inkafarma */}
+        <div className="p-6 bg-gradient-to-r from-inkafarma-green to-inkafarma-greenDark text-white text-center">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-white/20 flex items-center justify-center shadow-inner">
             <CheckCircle2 className="w-10 h-10 text-white stroke-[2.5]" />
           </div>
           <h2 className="text-2xl font-black">¡Pedido Registrado con Éxito!</h2>
@@ -29,8 +29,8 @@ export default function OrderSuccessModal({ order, onClose }) {
             </div>
 
             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-500 font-semibold">Estado en Base de Datos:</span>
-              <span className="font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+              <span className="text-slate-500 font-semibold">Estado de Transacción:</span>
+              <span className="font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full">
                 {order.status}
               </span>
             </div>
@@ -41,7 +41,7 @@ export default function OrderSuccessModal({ order, onClose }) {
             </div>
 
             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-500 font-semibold">Fecha de Emisión:</span>
+              <span className="text-slate-500 font-semibold">Fecha de Registro:</span>
               <span className="text-slate-700">
                 {new Date(order.created_at).toLocaleString("es-PE")}
               </span>
@@ -51,8 +51,8 @@ export default function OrderSuccessModal({ order, onClose }) {
           {/* Lista de ítems registrados en db_pedidos_inka */}
           <div>
             <h4 className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-              <PackageCheck className="w-4 h-4 text-inka-blue" />
-              <span>Productos incluidos en la orden:</span>
+              <PackageCheck className="w-4 h-4 text-inkafarma-green" />
+              <span>Medicamentos incluidos en la orden:</span>
             </h4>
             <div className="space-y-1.5 max-h-40 overflow-y-auto">
               {order.items?.map((item) => (
@@ -61,7 +61,7 @@ export default function OrderSuccessModal({ order, onClose }) {
                   className="flex justify-between items-center text-xs p-2.5 bg-slate-50 rounded-xl border border-slate-100"
                 >
                   <span className="text-slate-800 font-medium">
-                    Producto #{item.product_id} × {item.quantity} un.
+                    Medicamento #{item.product_id} × {item.quantity} un.
                   </span>
                   <span className="font-bold text-slate-900">
                     S/ {(Number(item.unit_price) * item.quantity).toFixed(2)}
@@ -74,21 +74,21 @@ export default function OrderSuccessModal({ order, onClose }) {
           {/* Total pagado */}
           <div className="flex justify-between items-center pt-3 border-t border-slate-200 text-sm font-black">
             <span className="text-slate-800">Total Liquidado:</span>
-            <span className="text-lg text-inka-blue">S/ {Number(order.total_amount).toFixed(2)}</span>
+            <span className="text-lg text-inkafarma-green">S/ {Number(order.total_amount).toFixed(2)}</span>
           </div>
 
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 flex items-start gap-2">
-            <ShieldCheck className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 flex items-start gap-2">
+            <ShieldCheck className="w-4 h-4 shrink-0 text-inkafarma-green mt-0.5" />
             <span>
-              <strong>Validación Inter-servicio Completada:</strong> El microservicio de pedidos
-              consultó al microservicio de catálogo vía HTTPX para garantizar que el stock existiera
-              antes de asentar esta transacción.
+              <strong>Validación Síncrona Exitosa:</strong> El microservicio de pedidos
+              consultó al microservicio de catálogo vía HTTPX para certificar el inventario
+              antes de autorizar esta orden.
             </span>
           </div>
 
           <button
             onClick={onClose}
-            className="w-full py-3 px-4 bg-inka-blue hover:bg-inka-lightBlue text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-inkafarma-green hover:bg-inkafarma-greenHover text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
           >
             <span>Seguir Comprando</span>
             <ArrowRight className="w-4 h-4" />

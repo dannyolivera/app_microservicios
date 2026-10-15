@@ -7,19 +7,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        inka: {
+        inkafarma: {
+          green: "#00A650",
+          greenHover: "#008E44",
+          greenDark: "#006F35",
+          greenLight: "#E8F8F0",
+          greenBg: "#F2FBF6",
+          red: "#E30613",
+          redHover: "#C50510",
           yellow: "#FFD200",
-          yellowHover: "#F0C400",
-          blue: "#002D62",
-          lightBlue: "#005BAA",
-          green: "#00A859",
-          darkGreen: "#008544",
-          red: "#E31837",
-          bgLight: "#F8FAFC"
+          yellowHover: "#E6BC00",
+          dark: "#1A2E22",
+          slate: "#4A5568",
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
       }
     },
   },

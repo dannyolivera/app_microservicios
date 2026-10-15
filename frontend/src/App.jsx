@@ -11,7 +11,6 @@ import {
   checkMicroservicesHealth,
 } from "./services/api";
 import {
-  Pill,
   Sparkles,
   Truck,
   ShieldCheck,
@@ -74,12 +73,10 @@ export default function App() {
     setIsLoading(true);
     setLoadError("");
 
-    // 1. Verificar estado de los 3 microservicios
     const healthStatus = await checkMicroservicesHealth();
     setHealth(healthStatus);
 
     try {
-      // 2. Consultar Microservicio de Catálogo (Puerto 8001)
       const [catsData, prodsData] = await Promise.all([
         getCategories().catch(() => []),
         getProducts(0, 100).catch(() => ({ items: [] })),
@@ -89,7 +86,7 @@ export default function App() {
       setProducts(prodsData.items || []);
     } catch (err) {
       setLoadError(
-        "No se pudo conectar con el Microservicio de Catálogo (:8001). Asegúrate de levantarlo con: python3 -m uvicorn main:app --port 8001 --reload"
+        "No se pudo conectar con el Microservicio de Catálogo (:8001). Asegúrate de levantarlo con: python -m uvicorn main:app --port 8001 --reload"
       );
     } finally {
       setIsLoading(false);
@@ -99,7 +96,6 @@ export default function App() {
   useEffect(() => {
     loadData();
 
-    // Verificación periódica de microservicios cada 20 segundos
     const interval = setInterval(async () => {
       const h = await checkMicroservicesHealth();
       setHealth(h);
@@ -166,7 +162,7 @@ export default function App() {
     setCart([]);
   };
 
-  // Procesar Checkout (Llamada al Microservicio de Órdenes en :8003)
+  // Procesar Checkout (Microservicio de Pedidos :8003)
   const handleCheckout = async () => {
     if (!user) {
       setIsAuthOpen(true);
@@ -187,16 +183,12 @@ export default function App() {
         })),
       };
 
-      // Invocación a Microservicio de Órdenes (:8003)
-      // Este servicio consultará síncronamente vía HTTPX a Catálogo (:8001) para validar stock
       const createdOrder = await createOrder(payload);
 
-      // Limpiar carrito y mostrar modal de éxito
       setCart([]);
       setIsCartOpen(false);
       setLastOrder(createdOrder);
 
-      // Recargar catálogo para refrescar los stocks actualizados
       loadData();
     } catch (err) {
       setCheckoutError(err.message || "Error al procesar la orden");
@@ -231,43 +223,43 @@ export default function App() {
         health={health}
       />
 
-      {/* Hero Banner Estilo Farmacia */}
-      <div className="bg-gradient-to-r from-inka-blue via-inka-lightBlue to-slate-900 text-white py-10 px-4 shadow-inner">
+      {/* Hero Banner Estilo Inkafarma */}
+      <div className="bg-gradient-to-r from-inkafarma-green via-emerald-600 to-inkafarma-dark text-white py-10 px-4 shadow-md">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-3 max-w-xl text-center md:text-left">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-inka-yellow/20 border border-inka-yellow/40 text-inka-yellow text-xs font-bold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Simulador Universitario de Microservicios Farmacéuticos</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-xs border border-white/30 text-white text-xs font-bold">
+              <Sparkles className="w-3.5 h-3.5 text-inkafarma-yellow" />
+              <span>Plataforma de Comercio Farmacéutico Distribuida</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
-              Medicamentos y Salud al Mejor Precio
+              Medicamentos y Salud al Mejor Precio de Farmacia
             </h1>
-            <p className="text-sm text-slate-200 leading-relaxed">
-              Catálogo conectado al microservicio <code className="bg-blue-950 px-1.5 py-0.5 rounded text-inka-yellow font-mono text-xs">:8001</code>,
-              autenticación con bcrypt y JWT en <code className="bg-blue-950 px-1.5 py-0.5 rounded text-inka-yellow font-mono text-xs">:8002</code>,
-              y procesamiento síncrono de pedidos con HTTPX en <code className="bg-blue-950 px-1.5 py-0.5 rounded text-inka-yellow font-mono text-xs">:8003</code>.
+            <p className="text-xs sm:text-sm text-emerald-50 leading-relaxed">
+              Catálogo conectado al microservicio <code className="bg-emerald-900/60 px-1.5 py-0.5 rounded text-inkafarma-yellow font-mono text-xs">:8001</code>,
+              autenticación con bcrypt y JWT en <code className="bg-emerald-900/60 px-1.5 py-0.5 rounded text-inkafarma-yellow font-mono text-xs">:8002</code>,
+              y procesamiento síncrono con HTTPX en <code className="bg-emerald-900/60 px-1.5 py-0.5 rounded text-inkafarma-yellow font-mono text-xs">:8003</code>.
             </p>
           </div>
 
           {/* Tarjetas de Beneficios */}
           <div className="grid grid-cols-2 gap-3 w-full md:w-auto">
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-inka-yellow text-inka-blue">
+            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-4 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-inkafarma-yellow text-inkafarma-dark">
                 <Truck className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-bold">Despacho Exprés</p>
-                <p className="text-[11px] text-slate-300">En menos de 45 min</p>
+                <p className="text-xs font-bold">Envío Exprés</p>
+                <p className="text-[11px] text-emerald-100">Despacho en 45 min</p>
               </div>
             </div>
 
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-emerald-400 text-slate-900">
+            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-4 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-white text-inkafarma-green">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs font-bold">Stock en Tiempo Real</p>
-                <p className="text-[11px] text-slate-300">Validación HTTPX</p>
+                <p className="text-xs font-bold">Stock Verificado</p>
+                <p className="text-[11px] text-emerald-100">Validación HTTPX</p>
               </div>
             </div>
           </div>
@@ -276,25 +268,25 @@ export default function App() {
 
       {/* Contenido Principal */}
       <main className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full space-y-6">
-        {/* Banner de Advertencia si los microservicios están apagados */}
-        {(!health.catalog || !health.orders) && (
+        {/* Banner de Advertencia si algún microservicio está inactivo */}
+        {(!health.catalog || !health.orders || !health.users) && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
             <div className="flex items-center gap-2.5">
               <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
               <div>
-                <p className="font-bold">Aviso de Microservicios:</p>
+                <p className="font-bold">Estado de los Microservicios:</p>
                 <p className="text-slate-600">
-                  {!health.catalog && "• El Microservicio de Catálogo (:8001) no responde. "}
-                  {!health.users && "• El Microservicio de Usuarios (:8002) no responde. "}
-                  {!health.orders && "• El Microservicio de Pedidos (:8003) no responde."}
+                  {!health.catalog && "• Catálogo (:8001) desconectado. "}
+                  {!health.users && "• Usuarios (:8002) desconectado. "}
+                  {!health.orders && "• Pedidos (:8003) desconectado."}
                 </p>
               </div>
             </div>
             <button
               onClick={loadData}
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold flex items-center gap-1.5 shrink-0"
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold flex items-center gap-1.5 shrink-0 transition-colors"
             >
-              <RefreshCw className="w-3.5 h-3.5" /> Reintentar
+              <RefreshCw className="w-3.5 h-3.5" /> Reintentar Conexión
             </button>
           </div>
         )}
@@ -305,11 +297,11 @@ export default function App() {
             onClick={() => setSelectedCategoryId(null)}
             className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shadow-xs ${
               selectedCategoryId === null
-                ? "bg-inka-blue text-white shadow-md"
-                : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                ? "bg-inkafarma-green text-white shadow-md shadow-emerald-500/25"
+                : "bg-white text-slate-700 hover:bg-emerald-50 hover:text-inkafarma-green border border-slate-200"
             }`}
           >
-            Todos los Productos ({products.length})
+            Todos los Medicamentos ({products.length})
           </button>
 
           {categories.map((category) => (
@@ -318,8 +310,8 @@ export default function App() {
               onClick={() => setSelectedCategoryId(category.id)}
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shadow-xs ${
                 selectedCategoryId === category.id
-                  ? "bg-inka-blue text-white shadow-md"
-                  : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
+                  ? "bg-inkafarma-green text-white shadow-md shadow-emerald-500/25"
+                  : "bg-white text-slate-700 hover:bg-emerald-50 hover:text-inkafarma-green border border-slate-200"
               }`}
             >
               {category.name}
@@ -330,7 +322,7 @@ export default function App() {
         {/* Grilla de Productos */}
         {isLoading ? (
           <div className="text-center py-20">
-            <HeartPulse className="w-10 h-10 animate-bounce text-inka-blue mx-auto mb-2" />
+            <HeartPulse className="w-10 h-10 animate-bounce text-inkafarma-green mx-auto mb-2" />
             <p className="text-sm font-bold text-slate-700">Cargando catálogo farmacéutico...</p>
             <p className="text-xs text-slate-400">Consultando http://localhost:8001/products/</p>
           </div>
@@ -341,7 +333,7 @@ export default function App() {
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
               {loadError
                 ? loadError
-                : "No hay productos en esta categoría o no coinciden con la búsqueda. Puedes agregar productos desde Swagger en el puerto 8001 o ejecutar seed_data.sql."}
+                : "No hay productos disponibles en esta categoría o no coinciden con la búsqueda. Puedes agregar productos desde Swagger o ejecutar seed_data.sql."}
             </p>
           </div>
         ) : (
@@ -362,18 +354,19 @@ export default function App() {
       </main>
 
       {/* Pie de Página */}
-      <footer className="bg-slate-900 text-slate-400 text-xs py-8 border-t border-slate-800 mt-12">
+      <footer className="bg-inkafarma-dark text-slate-400 text-xs py-8 border-t border-emerald-950 mt-12">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-inka-blue flex items-center justify-center text-inka-yellow font-black">
-              <Pill className="w-4 h-4" />
-            </div>
-            <span className="font-bold text-white text-sm">InkaPharmacy Simulator</span>
-            <span>— Arquitectura de Microservicios</span>
+          <div className="flex items-center gap-3">
+            <img
+              src="/inkafarma-logo.png"
+              alt="Inkafarma"
+              className="h-8 w-auto brightness-0 invert"
+            />
+            <span className="text-slate-400">— Arquitectura de Microservicios Distribuidos</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-slate-400 text-[11px]">
-            <span>FastAPI • SQLAlchemy • MySQL • Alembic • Tailwind CSS</span>
+            <span>FastAPI • SQLAlchemy • MySQL • Alembic • React • Tailwind CSS</span>
           </div>
         </div>
       </footer>
