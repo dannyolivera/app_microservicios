@@ -1,0 +1,60 @@
+# =============================================================================
+# GITIGNORE - SISTEMA DE MICROSERVICIOS FARMACÉUTICOS
+# =============================================================================
+
+# --- Entornos Virtuales de Python ---
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Bytecode y Cache de Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Variables de Entorno y Credenciales Sensibles ---
+.env
+*/.env
+*.env.local
+*.env.*.local
+# Conservar las plantillas de ejemplo
+!.env.example
+!*/.env.example
+
+# --- Dependencias y Build del Frontend (Node.js / Vite) ---
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Archivos de Base de Datos Locales ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Editores e IDEs ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+
+# --- Archivos del Sistema Operativo ---
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
