@@ -13,14 +13,14 @@ INSERT INTO `categories` (`id`, `name`, `description`) VALUES
 (3, 'Vitaminas y Suplementos', 'Multivitamínicos, zinc, colágeno y vitamina C.')
 ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
 
--- Insertar Productos farmacéuticos con precios y stock inicial
-INSERT INTO `products` (`id`, `name`, `description`, `price`, `stock`, `category_id`) VALUES
-(1, 'Paracetamol 500mg - Caja 20 Tabletas', 'Analgésico y antipirético para el alivio del dolor y la fiebre.', 8.50, 50, 1),
-(2, 'Ibuprofeno 400mg - Blíster 10 Cápsulas', 'Antiinflamatorio no esteroideo para dolores musculares.', 6.20, 30, 1),
-(3, 'Amoxicilina 500mg - Caja 15 Cápsulas', 'Antibiótico betalactámico para infecciones respiratorias.', 18.00, 20, 1),
-(4, 'Protector Solar FPS 50+ 200ml', 'Protección solar de amplio espectro UVA/UVB.', 64.90, 15, 2),
-(5, 'Vitamina C + Zinc 1000mg - Tubo 10 Tabletas Efervescentes', 'Refuerzo del sistema inmunológico.', 19.90, 40, 3)
-ON DUPLICATE KEY UPDATE `stock`=VALUES(`stock`);
+-- Insertar Productos farmacéuticos con precios, stock inicial y sede asignada
+INSERT INTO `products` (`id`, `name`, `description`, `price`, `stock`, `branch`, `category_id`) VALUES
+(1, 'Paracetamol 500mg - Caja 20 Tabletas', 'Analgésico y antipirético para el alivio del dolor y la fiebre.', 8.50, 50, 'Sede Inkafarma - Miraflores (Av. Larco 450)', 1),
+(2, 'Ibuprofeno 400mg - Blíster 10 Cápsulas', 'Antiinflamatorio no esteroideo para dolores musculares.', 6.20, 30, 'Sede Inkafarma - Miraflores (Av. Larco 450)', 1),
+(3, 'Amoxicilina 500mg - Caja 15 Cápsulas', 'Antibiótico betalactámico para infecciones respiratorias.', 18.00, 20, 'Sede Inkafarma - Miraflores (Av. Larco 450)', 1),
+(4, 'Protector Solar FPS 50+ 200ml', 'Protección solar de amplio espectro UVA/UVB.', 64.90, 15, 'Sede Inkafarma - Miraflores (Av. Larco 450)', 2),
+(5, 'Vitamina C + Zinc 1000mg - Tubo 10 Tabletas Efervescentes', 'Refuerzo del sistema inmunológico.', 19.90, 40, 'Sede Inkafarma - Miraflores (Av. Larco 450)', 3)
+ON DUPLICATE KEY UPDATE `stock`=VALUES(`stock`), `branch`=VALUES(`branch`);
 
 
 -- 2. POBLAR MICROSERVICIO DE USUARIOS (db_usuarios_inka)

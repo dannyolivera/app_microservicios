@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Trash2, Plus, Minus, ShoppingBag, ShieldCheck, ArrowRight, Loader2, AlertCircle, Truck } from "lucide-react";
+import { X, Trash2, Plus, Minus, ShoppingBag, ShieldCheck, ArrowRight, Loader2, AlertCircle, Store, Coins, CheckCircle } from "lucide-react";
 
 export default function CartDrawer({
   isOpen,
@@ -12,7 +12,14 @@ export default function CartDrawer({
   onOpenAuth,
   onCheckout,
   isProcessing,
-  checkoutError
+  checkoutError,
+  selectedBranch = "Inkafarma Miraflores (Av. Larco 450)",
+  onChangeBranch,
+  branches = [
+    "Inkafarma Miraflores (Av. Larco 450)",
+    "Inkafarma San Isidro (Av. Javier Prado 1200)",
+    "Inkafarma Lima Centro (Jr. de la Unión 600)"
+  ]
 }) {
   if (!isOpen) return null;
 
@@ -35,12 +42,12 @@ export default function CartDrawer({
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-inkafarma-green text-white flex items-center justify-center">
-                <ShoppingBag className="w-4 h-4" />
+                <Store className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="font-bold text-slate-800 text-base leading-tight">Mi Carrito de Compra</h2>
-                <p className="text-[11px] text-slate-400">
-                  {items.reduce((acc, i) => acc + i.quantity, 0)} {items.reduce((acc, i) => acc + i.quantity, 0) === 1 ? 'producto' : 'productos'} seleccionados
+                <h2 className="font-bold text-slate-800 text-base leading-tight">Mi Pedido para Botica</h2>
+                <p className="text-[11px] text-emerald-700 font-semibold">
+                  {items.reduce((acc, i) => acc + i.quantity, 0)} {items.reduce((acc, i) => acc + i.quantity, 0) === 1 ? 'producto' : 'productos'} para recojo en botica
                 </p>
               </div>
             </div>
@@ -58,7 +65,7 @@ export default function CartDrawer({
               <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0 text-inkafarma-red mt-0.5" />
                 <div>
-                  <p className="font-bold">No se pudo procesar tu compra:</p>
+                  <p className="font-bold">No se pudo procesar la reserva:</p>
                   <p className="mt-0.5">{checkoutError}</p>
                 </div>
               </div>
@@ -71,7 +78,7 @@ export default function CartDrawer({
                 </div>
                 <h4 className="font-bold text-slate-700 text-sm">Tu carrito está vacío</h4>
                 <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                  Explora nuestro catálogo y agrega los medicamentos que necesitas para tu salud.
+                  Elige tus medicamentos del catálogo para reservarlos y recogerlos en tu botica preferida.
                 </p>
               </div>
             ) : (
@@ -124,23 +131,46 @@ export default function CartDrawer({
             )}
           </div>
 
-          {/* Pie del Carrito y Botón de Checkout */}
+          {/* Pie del Carrito y Botón de Reserva Click & Collect */}
           {items.length > 0 && (
             <div className="p-4 sm:p-5 border-t border-slate-200 bg-slate-50 space-y-3">
+              {/* Selección de Botica para Retiro */}
+              <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs space-y-1.5 shadow-2xs">
+                <div className="flex items-center justify-between text-slate-700 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-inkafarma-green" />
+                    Botica de Recojo:
+                  </span>
+                </div>
+                {onChangeBranch ? (
+                  <select
+                    value={selectedBranch}
+                    onChange={(e) => onChangeBranch(e.target.value)}
+                    className="w-full text-xs font-medium text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-inkafarma-green outline-none"
+                  >
+                    {branches.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs font-semibold text-slate-800">{selectedBranch}</p>
+                )}
+                <p className="text-[10px] text-slate-400">
+                  Horario de atención: Hoy de 8:00 AM a 10:00 PM
+                </p>
+              </div>
+
               {/* Información del Cliente */}
               {user ? (
-                <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs space-y-1">
-                  <div className="flex justify-between font-semibold text-slate-700">
-                    <span>Entregar a:</span>
-                    <span className="text-slate-900 font-bold">{user.full_name}</span>
-                  </div>
-                  <div className="text-slate-500 truncate text-[11px]">
-                    📍 {user.address || "Dirección de entrega a domicilio registrada"}
-                  </div>
+                <div className="px-3 py-2 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs flex justify-between items-center">
+                  <span className="text-slate-600">Cliente titular:</span>
+                  <span className="text-slate-900 font-bold">{user.full_name}</span>
                 </div>
               ) : (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs flex items-center justify-between gap-2">
-                  <span className="text-amber-800 text-[11px]">Inicia sesión para registrar tu pedido</span>
+                  <span className="text-amber-800 text-[11px]">Inicia sesión para completar tu reserva</span>
                   <button
                     onClick={onOpenAuth}
                     className="font-bold text-inkafarma-green hover:underline shrink-0 text-xs"
@@ -150,26 +180,34 @@ export default function CartDrawer({
                 </div>
               )}
 
+              {/* Beneficio: Pago Seguro en Botica */}
+              <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-950">
+                  <Coins className="w-3.5 h-3.5 text-inkafarma-green" />
+                  <span>Sin pagos por internet • Paga directo en botica</span>
+                </div>
+                <p className="text-emerald-700 leading-tight">
+                  No necesitas ingresar tarjetas bancarias online. Guardamos tus productos ahora y pagas al retirar en caja (efectivo o tarjeta).
+                </p>
+              </div>
+
               {/* Resumen de Totales */}
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-1 pt-1">
                 <div className="flex justify-between text-xs text-slate-500">
-                  <span>Subtotal:</span>
+                  <span>Subtotal productos:</span>
                   <span>S/ {totalAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-inkafarma-green" />
-                    Costo de envío:
-                  </span>
-                  <span className="text-emerald-700 font-bold">¡Envío Gratis!</span>
+                  <span>Costo de retiro:</span>
+                  <span className="text-emerald-700 font-bold">¡Gratis (S/ 0.00)!</span>
                 </div>
-                <div className="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-slate-200">
-                  <span>Total:</span>
+                <div className="flex justify-between text-base font-black text-slate-900 pt-1.5 border-t border-slate-200">
+                  <span>Total a pagar en botica:</span>
                   <span className="text-inkafarma-green">S/ {totalAmount.toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* Botón de Procesar Orden */}
+              {/* Botón de Confirmar Reserva */}
               <button
                 onClick={user ? onCheckout : onOpenAuth}
                 disabled={isProcessing}
@@ -178,24 +216,24 @@ export default function CartDrawer({
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-inkafarma-yellow" />
-                    <span>Verificando disponibilidad de medicamentos...</span>
+                    <span>Confirmando tu reserva...</span>
                   </>
                 ) : user ? (
                   <>
-                    <span>Confirmar y Pagar Pedido</span>
+                    <span>Confirmar Reserva (Pagar en Botica)</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 ) : (
                   <>
-                    <span>Inicia Sesión para Comprar</span>
+                    <span>Inicia Sesión para Reservar</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
 
-              <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 text-center pt-1">
+              <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 text-center pt-0.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-inkafarma-green" />
-                <span>Compra segura con garantía farmacéutica de Inkafarma</span>
+                <span>Tus medicamentos te esperan listos en botica</span>
               </div>
             </div>
           )}

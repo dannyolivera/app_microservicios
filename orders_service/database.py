@@ -29,9 +29,35 @@ engine = create_engine(
     pool_recycle=3600
 )
 
+from sqlalchemy import text
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+
+def ensure_orders_schema():
+    """
+    Garantiza de forma idempotente que las columnas de Click & Collect
+    (pickup_code, branch, payment_method) y compatibilidad de status
+    existan en la tabla orders de db_pedidos_inka.
+    """
+    statements = [
+        "ALTER TABLE orders ADD COLUMN pickup_code VARCHAR(50) NULL UNIQUE",
+        "ALTER TABLE orders ADD COLUMN branch VARCHAR(150) NULL DEFAULT 'Sede Inkafarma - Miraflores (Av. Larco 450)'",
+        "ALTER TABLE orders ADD COLUMN payment_method VARCHAR(50) NULL DEFAULT 'PAGO_EN_CAJA_PRESENCIAL'",
+        "ALTER TABLE orders MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'RESERVED'"
+    ]
+    try:
+        with engine.connect() as conn:
+            for stmt in statements:
+                try:
+                    conn.execute(text(stmt))
+                    conn.commit()
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def get_db():

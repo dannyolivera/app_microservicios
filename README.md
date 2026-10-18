@@ -1,97 +1,92 @@
-# Sistema de Comercio Electrónico Farmacéutico
-## Arquitectura de Microservicios con FastAPI, SQLAlchemy, MySQL y React
+# Plataforma Omnicanal Click & Collect (Inkafarma)
+## Evolución hacia una Arquitectura Orientada a Servicios (SOA) y Microservicios
+### FastAPI, SQLAlchemy, MySQL y React (Tailwind CSS)
 
-Este proyecto implementa una plataforma distribuida de comercio electrónico farmacéutico bajo el patrón arquitectónico **Database-per-Service**, donde cada microservicio gestiona su propio esquema de base de datos de forma desacoplada e independiente.
+Este proyecto implementa una solución de **Comercio Omnicanal Click & Collect** bajo el patrón arquitectónico **Database-per-Service**, donde cada microservicio gestiona su propio esquema de base de datos de forma desacoplada e independiente.
+
+El objetivo central del sistema es **eliminar la fricción de pasarelas bancarias virtuales** y **erradicar los quiebres de stock** mediante reservas digitales inmediatas con **bloqueo atómico de inventario en tiempo real**, emisión de tickets alfanuméricos de recojo y liquidación presencial en la caja física de la botica (Efectivo o POS).
 
 ---
 
-## 🎯 Visión General de la Arquitectura
-
-El sistema modela el flujo comercial de una farmacia en línea: gestión de inventario y catálogo de medicamentos, registro y autenticación de usuarios, y procesamiento de órdenes de compra con validación de stock en tiempo real mediante comunicación inter-servicio síncrona.
+## 🎯 Visión General de la Arquitectura (TO-BE)
 
 ```mermaid
 graph TD
-    Client[Cliente Web / Frontend :5173 / Swagger UI]
+    Client[Cliente Web SPA React :5173]
 
-    subgraph Service1[Microservicio 1: Catálogo - Puerto 8001]
-        CatApp[FastAPI Catalog API]
+    subgraph Service1[Microservicio 1: Catálogo e Inventario - Puerto 8001]
+        CatApp[FastAPI Catalog & Stock API]
         DBCat[(MySQL: db_catalogo_inka)]
         CatApp --> DBCat
     end
 
     subgraph Service2[Microservicio 2: Usuarios y Auth - Puerto 8002]
-        UserApp[FastAPI Users & Auth API]
+        UserApp[FastAPI Users & Auth API / JWT]
         DBUser[(MySQL: db_usuarios_inka)]
         UserApp --> DBUser
     end
 
-    subgraph Service3[Microservicio 3: Pedidos - Puerto 8003]
-        OrderApp[FastAPI Orders API]
+    subgraph Service3[Microservicio 3: Pedidos y Click & Collect - Puerto 8003]
+        OrderApp[FastAPI Orders & C&C Orchestrator]
         DBOrder[(MySQL: db_pedidos_inka)]
         OrderApp --> DBOrder
     end
 
-    Client -->|1. Consulta de Catálogo| CatApp
-    Client -->|2. Autenticación y Registro| UserApp
-    Client -->|3. Creación de Pedido| OrderApp
+    Client -->|1. Consulta de Catálogo por Sede| CatApp
+    Client -->|2. Autenticación Stateless JWT / ME| UserApp
+    Client -->|3. Emisión de Reserva Click & Collect| OrderApp
 
-    OrderApp -.->|4. HTTPX Síncrono: GET /products/:id<br/>Valida existencia y disponibilidad de stock| CatApp
+    OrderApp -.->|4a. Fase 1: GET /products/:id Consulta existencia| CatApp
+    OrderApp -.->|4b. Fase 2: PATCH /products/:id/stock Bloqueo atómico con Row-Lock| CatApp
+    OrderApp -.->|4c. Rollback compensatorio si falla algún ítem| CatApp
 ```
 
 ---
 
 ## 🧩 Arquitectura de Módulos y Lógica de Negocio
 
-A continuación se detalla la responsabilidad de cada servicio, su modelo de datos y los flujos de comunicación del sistema:
-
-### 1. Microservicio de Catálogo (`catalog_service` - Puerto 8001)
-- **Responsabilidad:** Administrar el inventario farmacéutico, las categorías de productos y los precios vigentes.
+### 1. Microservicio de Catálogo e Inventario (`catalog_service` - Puerto 8001)
+- **Responsabilidad:** Administrar el inventario físico por sede farmacéutica y ejecutar el bloqueo atómico transaccional de stock.
 - **Base de Datos:** `db_catalogo_inka`.
 - **Modelos ORM:**
-  - `Category`: Identificador, nombre de la categoría (ej. *Analgésicos*, *Cuidado Personal*, *Vitaminas*) y descripción.
-  - `Product`: Identificador, nombre comercial y presentación (ej. *Paracetamol 500mg - Caja 20 tabletas*), descripción médica, precio unitario, stock disponible y referencia a la categoría.
-- **Endpoints:**
-  - `POST /categories/`: Registro de nuevas categorías.
-  - `GET /categories/`: Listado completo de categorías.
-  - `POST /products/`: Registro de nuevos productos en el catálogo.
-  - `GET /products/`: Listado paginado de productos con soporte para filtros.
-  - `GET /products/{id}`: Consulta individual por ID de producto (consumido externamente y por el servicio de pedidos).
+  - `Category`: Identificador, nombre de la categoría (ej. *Medicamentos y Alivio del Dolor*, *Cuidado Personal*, *Vitaminas*) y descripción.
+  - `Product`: Identificador, nombre comercial, descripción médica, precio unitario, stock disponible en botica, sede asignada (`branch`) y referencia a la categoría.
+- **Endpoints Clave:**
+  - `GET /products/` o `/api/v1/products`: Catálogo paginado con filtros por categoría.
+  - `GET /products/{id}` o `/api/v1/products/{id}`: Ficha técnica, precio y existencias.
+  - `PATCH /products/{id}/stock` o `/api/v1/products/{id}/stock`: **Bloqueo o reposición atómica de inventario** mediante bloqueo de fila (`SELECT ... FOR UPDATE`) para prevenir sobreventas concurrentes.
 
 ---
 
 ### 2. Microservicio de Usuarios y Autenticación (`users_service` - Puerto 8002)
-- **Responsabilidad:** Gestionar las cuentas de clientes, la seguridad de las contraseñas y la emisión de credenciales de sesión.
+- **Responsabilidad:** Registro, autenticación segura y emisión de credenciales stateless (JWT) para trazabilidad de reservas.
 - **Base de Datos:** `db_usuarios_inka`.
-- **Modelo ORM:**
-  - `User`: ID, nombre completo, email único, hash de contraseña, dirección de entrega y teléfono.
 - **Seguridad:**
-  - **Hashing con Bcrypt:** Las contraseñas se almacenan procesadas mediante funciones hash unidireccionales con salt aleatorio.
-  - **JSON Web Tokens (JWT):** Autenticación basada en tokens estándar HMAC-SHA256 con tiempo de expiración definido.
-- **Endpoints:**
-  - `POST /auth/register`: Registro de nuevos usuarios con cifrado automático de credenciales.
-  - `POST /auth/login`: Validación de credenciales y retorno de token JWT y datos de usuario.
-  - `GET /users/{id}`: Consulta de perfil de usuario.
+  - **Hashing con Bcrypt:** Almacenamiento seguro unidireccional con salt aleatorio.
+  - **JSON Web Tokens (JWT):** Generación y validación de tokens de acceso Bearer.
+- **Endpoints Clave:**
+  - `POST /auth/register` o `/api/v1/auth/register`: Registro de nuevos clientes.
+  - `POST /auth/login` o `/api/v1/auth/login`: Autenticación y retorno de token JWT.
+  - `GET /auth/me` o `/api/v1/auth/me`: Claims y perfil del cliente autenticado vía Bearer Token.
 
 ---
 
-### 3. Microservicio de Pedidos / Órdenes (`orders_service` - Puerto 8003)
-- **Responsabilidad:** Recepción y procesamiento de compras, asegurando la consistencia transaccional del stock antes de asentar una orden.
+### 3. Microservicio de Pedidos y Orquestador Click & Collect (`orders_service` - Puerto 8003)
+- **Responsabilidad:** Orquestador de la reserva digital, emisión de tickets de recojo y gestión transaccional con tolerancia a fallos.
 - **Base de Datos:** `db_pedidos_inka`.
 - **Modelos ORM:**
-  - `Order`: ID, usuario ID, monto total liquidado, estado (`PENDING`, `COMPLETED`, `CANCELLED`) y fecha de creación.
-  - `OrderItem`: ID, orden ID, producto ID, cantidad solicitada y precio unitario registrado al momento de la transacción.
-- **Comunicación Inter-servicio (HTTPX Síncrono):**
-  - Al recibir una solicitud `POST /orders/`, el servicio consulta en tiempo real al Microservicio de Catálogo:
-    `GET http://localhost:8001/products/{product_id}`
-  - **Validaciones de negocio ejecutadas:**
-    1. **Existencia:** Si el producto no existe en el catálogo, retorna `HTTP 404 Not Found`.
-    2. **Stock:** Si la cantidad requerida supera el inventario disponible, retorna `HTTP 400 Bad Request` informando las unidades disponibles.
-    3. **Cálculo de Importes:** Se computa `cantidad * precio_unitario` por cada ítem y se asienta la orden con estado `COMPLETED`.
-    4. **Resiliencia:** Si el servicio de catálogo no responde, se maneja el error con `HTTP 503 Service Unavailable`.
-- **Endpoints:**
-  - `POST /orders/`: Validación con catálogo y registro de la orden.
-  - `GET /orders/{id}`: Consulta de orden y sus ítems asociados.
-  - `GET /orders/`: Listado de órdenes registradas.
+  - `Order`: ID, código único de recojo (`pickup_code` alfanumérico ej. `INKA-CC-7F3A9`), usuario ID, monto total liquidable en botica, sede de retiro (`branch`), modalidad (`PAGO_EN_CAJA_PRESENCIAL`), estado (`RESERVED`, `COLLECTED`, `CANCELLED`) y fecha de creación.
+  - `OrderItem`: ID, orden ID, producto ID, cantidad solicitada y precio unitario congelado.
+- **Orquestación en 2 Fases y Compensación (Saga Ligera):**
+  1. **Fase 1 (Validación):** Consulta existencia y precios en `catalog_service`.
+  2. **Fase 2 (Bloqueo Atómico):** Invoca `PATCH /products/{id}/stock` con `action="block"`.
+  3. **Compensación (Rollback):** Si un producto falla por falta de stock o timeout, se invoca `PATCH /products/{id}/stock` con `action="release"` para liberar inmediatamente los productos previamente bloqueados.
+- **Endpoints Clave:**
+  - `POST /orders/` o `/api/v1/orders`: Orquestación y emisión de la reserva con código de recojo.
+  - `GET /orders/{id}`: Estado transaccional del ticket (utilizado por el personal de mostrador en botica).
+  - `GET /orders/user/{user_id}`: Historial de reservas emitidas por cliente.
+  - `PATCH /orders/{id}/collect`: Cobro presencial en caja (Efectivo/POS) y entrega de medicamentos.
+  - `PATCH /orders/{id}/cancel`: Cancelación con reposición automática de stock en Catálogo.
 
 ---
 

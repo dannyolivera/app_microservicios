@@ -10,14 +10,18 @@ from database import Base
 
 class OrderStatus(str, enum.Enum):
     """
-    Estados posibles en el ciclo de vida de un pedido farmacéutico:
-    - PENDING: Pedido generado, en espera de pago o despacho.
-    - COMPLETED: Pedido confirmado con stock verificado y procesado.
-    - CANCELLED: Pedido cancelado por falta de stock o solicitud del cliente.
+    Ciclo de vida transaccional Click & Collect (Slides 2, 7, 8, 9, 12):
+    - RESERVED: Reserva digital confirmada con bloqueo atómico de existencias.
+    - COLLECTED: Retirado y liquidado presencialmente en botica física (caja).
+    - CANCELLED: Reserva cancelada / compensada con reposición de inventario.
+    - PENDING: Reserva en proceso.
+    - COMPLETED: Completado (compatibilidad histórica).
     """
+    RESERVED = "RESERVED"
+    COLLECTED = "COLLECTED"
+    CANCELLED = "CANCELLED"
     PENDING = "PENDING"
     COMPLETED = "COMPLETED"
-    CANCELLED = "CANCELLED"
 
 
 # =============================================================================
@@ -26,23 +30,33 @@ class OrderStatus(str, enum.Enum):
 
 class Order(Base):
     """
-    Modelo representativo de la orden o pedido de compra en la farmacia.
+    Modelo representativo de la orden o reserva Click & Collect.
+    Incluye código único alfanumérico para recojo y sede física de retiro.
     """
     __tablename__ = "orders"
 
     # Clave primaria autoincremental
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     
-    # ID del usuario que realizó la compra (pertenece lógicamente al microservicio de usuarios)
+    # Código único alfanumérico de recojo en botica física (Slide 2 y 12)
+    pickup_code = Column(String(50), nullable=True, unique=True, index=True)
+
+    # ID del usuario que realizó la compra (Microservicio de Usuarios)
     user_id = Column(Integer, nullable=False, index=True)
     
-    # Monto total acumulado del pedido
+    # Monto total a liquidar en caja al retirar en farmacia
     total_amount = Column(Numeric(10, 2), nullable=False, default=0.00)
     
-    # Estado de la orden
-    status = Column(Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
+    # Sede de la botica física asignada para el recojo presencial
+    branch = Column(String(150), nullable=True, default="Sede Inkafarma - Miraflores (Av. Larco 450)")
+
+    # Modalidad de liquidación (Cero pasarelas virtuales: pago en efectivo o POS en tienda)
+    payment_method = Column(String(50), nullable=True, default="PAGO_EN_CAJA_PRESENCIAL")
+
+    # Estado de la orden (almacenado como String para máxima compatibilidad DDL)
+    status = Column(String(50), nullable=False, default=OrderStatus.RESERVED.value)
     
-    # Fecha y hora de creación de la orden
+    # Fecha y hora de creación de la reserva
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Relación uno a muchos con los ítems de la orden

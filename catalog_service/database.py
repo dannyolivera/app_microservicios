@@ -32,11 +32,26 @@ engine = create_engine(
     pool_recycle=3600
 )
 
+from sqlalchemy import text
+
 # Fábrica de sesiones para interactuar con la base de datos
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Clase base declarativa para la definición de los modelos ORM
 Base = declarative_base()
+
+
+def ensure_catalog_schema():
+    """
+    Garantiza de forma idempotente que columnas como 'branch' existan
+    en la base de datos incluso si ya fue creada con el esquema previo.
+    """
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE products ADD COLUMN branch VARCHAR(150) DEFAULT 'Sede Inkafarma - Miraflores'"))
+            conn.commit()
+    except Exception:
+        pass
 
 
 def get_db():

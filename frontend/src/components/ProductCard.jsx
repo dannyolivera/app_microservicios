@@ -47,18 +47,18 @@ export default function ProductCard({ product, categoryName, onAddToCart }) {
             <Pill className="w-8 h-8 stroke-[1.8]" />
           </div>
 
-          {/* Badge de disponibilidad */}
+          {/* Badge de disponibilidad en botica */}
           {isOutOfStock ? (
             <span className="absolute bottom-2.5 left-2.5 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-              Agotado
+              Agotado en Botica
             </span>
           ) : isLowStock ? (
             <span className="absolute bottom-2.5 left-2.5 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-              Últimas {product.stock} un.
+              Últimas {product.stock} un. en botica
             </span>
           ) : (
             <span className="absolute bottom-2.5 left-2.5 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-white"></span> Disponible
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span> Stock en Botica ({product.stock})
             </span>
           )}
         </div>
@@ -88,7 +88,7 @@ export default function ProductCard({ product, categoryName, onAddToCart }) {
           </div>
           <p className="text-[10px] text-emerald-700 font-medium flex items-center gap-1 mt-0.5">
             <ShieldCheck className="w-3 h-3 text-inkafarma-green" />
-            Garantía Inkafarma
+            Pagas en botica al retirar (Efectivo o Tarjeta)
           </p>
         </div>
 
@@ -117,7 +117,7 @@ export default function ProductCard({ product, categoryName, onAddToCart }) {
             </button>
           </div>
 
-          {/* Botón Agregar al Carrito */}
+          {/* Botón Agregar a la Reserva */}
           <button
             onClick={handleAdd}
             disabled={isOutOfStock}

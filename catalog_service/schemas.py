@@ -35,6 +35,7 @@ class ProductBase(BaseModel):
     price: Decimal = Field(..., gt=0, decimal_places=2, description="Precio unitario en soles (PEN)")
     stock: int = Field(..., ge=0, description="Cantidad disponible en stock")
     category_id: int = Field(..., gt=0, description="Identificador de la categoría a la que pertenece")
+    branch: Optional[str] = Field("Sede Inkafarma - Miraflores", description="Sede o botica física asociada")
 
 
 class ProductCreate(ProductBase):
@@ -47,6 +48,18 @@ class ProductResponse(ProductBase):
     id: int = Field(..., description="Identificador único del producto")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class StockUpdateRequest(BaseModel):
+    """
+    Esquema para actualización / bloqueo atómico de inventario (Click & Collect).
+    Soporta operaciones de bloqueo ('block' / 'decrease') o reversión ('release' / 'increase').
+    """
+    quantity: int = Field(..., gt=0, description="Cantidad de unidades a modificar")
+    action: str = Field(
+        "block",
+        description="Acción a realizar: 'block' (bloqueo/reserva) o 'release' (liberación/rollback)"
+    )
 
 
 class ProductPaginatedResponse(BaseModel):

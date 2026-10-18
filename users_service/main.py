@@ -6,7 +6,12 @@ from sqlalchemy import func
 import models
 import schemas
 from database import engine, get_db, Base
-from security import hash_password, verify_password, create_access_token
+from typing import Optional
+import jwt
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from security import hash_password, verify_password, create_access_token, SECRET_KEY, ALGORITHM
+
+security_bearer = HTTPBearer(auto_error=False)
 
 # =============================================================================
 # INICIALIZACIÓN DEL MICROSERVICIO DE USUARIOS Y AUTENTICACIÓN (PUERTO 8002)
@@ -17,8 +22,8 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="InkaPharmacy - Users & Authentication Microservice",
-    description="Microservicio para la gestión de usuarios, clientes y seguridad/autenticación.",
-    version="1.0.0",
+    description="Microservicio para la gestión de usuarios, clientes y seguridad/autenticación stateless con JWT.",
+    version="1.1.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -61,6 +66,13 @@ def root_status():
     tags=["Authentication"],
     summary="Registrar un nuevo usuario"
 )
+@app.post(
+    "/api/v1/auth/register",
+    response_model=schemas.UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Authentication"],
+    include_in_schema=False
+)
 def register_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
     """
     Registra un nuevo usuario en la base de datos de usuarios (db_usuarios_inka).
@@ -101,6 +113,12 @@ def register_user(user_in: schemas.UserCreate, db: Session = Depends(get_db)):
     tags=["Authentication"],
     summary="Iniciar sesión y obtener token JWT"
 )
+@app.post(
+    "/api/v1/auth/login",
+    response_model=schemas.TokenResponse,
+    tags=["Authentication"],
+    include_in_schema=False
+)
 def login_user(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     """
     Autentica al usuario validando sus credenciales (email y contraseña).
@@ -131,6 +149,52 @@ def login_user(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
         token_type="bearer",
         user=user
     )
+
+
+@app.get(
+    "/auth/me",
+    response_model=schemas.UserResponse,
+    tags=["Authentication"],
+    summary="Claims y perfil del cliente autenticado (Slide 10)"
+)
+@app.get(
+    "/api/v1/auth/me",
+    response_model=schemas.UserResponse,
+    tags=["Authentication"],
+    include_in_schema=False
+)
+def get_current_user_profile(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    db: Session = Depends(get_db)
+):
+    """
+    Recupera el perfil del usuario autenticado descifrando las claims
+    del Bearer Token JWT recibido en el encabezado Authorization.
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Se requiere un token Bearer JWT válido.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload.get("sub"))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token JWT inválido o expirado.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado."
+        )
+    return user
 
 
 # =============================================================================

@@ -48,6 +48,9 @@ class Product(Base):
     # Cantidad de unidades disponibles en inventario
     stock = Column(Integer, nullable=False, default=0)
     
+    # Sede o botica física donde se encuentra el inventario (Click & Collect)
+    branch = Column(String(150), nullable=True, default="Sede Inkafarma - Miraflores")
+
     # Clave foránea que referencia a la categoría correspondiente
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False)
 

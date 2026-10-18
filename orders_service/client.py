@@ -24,22 +24,12 @@ class CatalogServiceClient:
 
     def get_product(self, product_id: int) -> Optional[Dict[str, Any]]:
         """
-        Consulta de manera síncrona al endpoint GET /products/{product_id}
-        del Microservicio de Catálogo.
-
-        Retorna:
-            - Dict con los datos del producto si existe (id, name, price, stock).
-            - None si el producto no existe (HTTP 404).
-
-        Lanza:
-            - RuntimeError si el servicio de catálogo no se encuentra disponible.
+        Consulta al endpoint GET /products/{product_id} del Microservicio de Catálogo.
         """
         url = f"{self.base_url}/products/{product_id}"
-
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.get(url)
-
                 if response.status_code == 200:
                     return response.json()
                 elif response.status_code == 404:
@@ -56,3 +46,53 @@ class CatalogServiceClient:
             raise RuntimeError(
                 f"Timeout while trying to connect to Catalog Service at {self.base_url}."
             )
+
+    def block_stock(self, product_id: int, quantity: int) -> Dict[str, Any]:
+        """
+        Ejecuta el BLOQUEO ATÓMICO de stock en Catalog Service (Fase 2 de la reserva).
+        Invoca PATCH /products/{product_id}/stock con acción 'block'.
+        """
+        url = f"{self.base_url}/products/{product_id}/stock"
+        payload = {"quantity": quantity, "action": "block"}
+
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.patch(url, json=payload)
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 400:
+                    detail = response.json().get("detail", "Stock insuficiente")
+                    raise ValueError(detail)
+                elif response.status_code == 404:
+                    raise ValueError(f"Producto ID {product_id} no existe en catálogo")
+                else:
+                    raise RuntimeError(
+                        f"Fallo al bloquear stock en Catálogo: {response.status_code} - {response.text}"
+                    )
+        except httpx.ConnectError:
+            raise RuntimeError(
+                f"No se pudo conectar con Catalog Service en {self.base_url} para bloquear inventario."
+            )
+        except httpx.TimeoutException:
+            raise RuntimeError(
+                f"Timeout al comunicarse con Catalog Service para bloqueo de stock."
+            )
+
+    def release_stock(self, product_id: int, quantity: int) -> Optional[Dict[str, Any]]:
+        """
+        Ejecuta la TRANSACCIÓN DE COMPENSACIÓN / ROLLBACK (Slide 8).
+        Libera las existencias bloqueadas si la reserva falló a mitad del proceso.
+        """
+        url = f"{self.base_url}/products/{product_id}/stock"
+        payload = {"quantity": quantity, "action": "release"}
+
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.patch(url, json=payload)
+                if response.status_code == 200:
+                    return response.json()
+                return None
+        except Exception:
+            # En compensación registramos y no bloqueamos para permitir recuperación
+            return None
+

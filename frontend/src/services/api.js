@@ -65,14 +65,20 @@ export async function registerUser(userData) {
 // --- MICROSERVICIO 3: PEDIDOS / ÓRDENES (PUERTO 8003) ---
 
 export async function createOrder(orderData) {
+  const token = localStorage.getItem("inka_token");
+  const headers = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_ENDPOINTS.ORDERS}/orders/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(orderData),
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.detail || "Error al procesar la orden");
+    throw new Error(data.detail || "Error al procesar la reserva");
   }
   return data;
 }
@@ -83,6 +89,25 @@ export async function getOrderById(orderId) {
     throw new Error(`Error ${response.status}: Orden no encontrada`);
   }
   return response.json();
+}
+
+export async function getUserOrders(userId) {
+  const response = await fetch(`${API_ENDPOINTS.ORDERS}/orders/user/${userId}`);
+  if (!response.ok) {
+    return [];
+  }
+  return response.json();
+}
+
+export async function markOrderCollected(orderId) {
+  const response = await fetch(`${API_ENDPOINTS.ORDERS}/orders/${orderId}/collect`, {
+    method: "PATCH",
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || "No se pudo registrar la entrega en botica");
+  }
+  return data;
 }
 
 // --- VERIFICACIÓN DE ESTADO DE LOS 3 MICROSERVICIOS ---
