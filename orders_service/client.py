@@ -6,10 +6,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # =============================================================================
-# CLIENTE HTTP PARA COMUNICACIÓN SÍNCRONA INTER-SERVICIO (HTTPX)
+# CLIENTES HTTP PARA COMUNICACIÓN SÍNCRONA INTER-SERVICIO (HTTPX)
 # =============================================================================
-# URL base para conectar con el microservicio de Catálogo (puerto 8001)
 CATALOG_SERVICE_URL = os.getenv("CATALOG_SERVICE_URL", "http://localhost:8001")
+PAYMENTS_SERVICE_URL = os.getenv("PAYMENTS_SERVICE_URL", "http://localhost:8004")
+
+
+class PaymentDeclinedError(Exception):
+    """Excepción lanzada cuando la pasarela rechaza el pago online."""
 
 
 class CatalogServiceClient:
@@ -22,14 +26,13 @@ class CatalogServiceClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def get_product(self, product_id: int) -> Optional[Dict[str, Any]]:
-        """
-        Consulta al endpoint GET /products/{product_id} del Microservicio de Catálogo.
-        """
+    def get_product(self, product_id: int, branch_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Consulta al endpoint GET /products/{product_id} del Microservicio de Catálogo."""
         url = f"{self.base_url}/products/{product_id}"
+        params = {"branch_id": branch_id} if branch_id is not None else None
         try:
             with httpx.Client(timeout=self.timeout) as client:
-                response = client.get(url)
+                response = client.get(url, params=params)
                 if response.status_code == 200:
                     return response.json()
                 elif response.status_code == 404:
@@ -47,13 +50,12 @@ class CatalogServiceClient:
                 f"Timeout while trying to connect to Catalog Service at {self.base_url}."
             )
 
-    def block_stock(self, product_id: int, quantity: int) -> Dict[str, Any]:
-        """
-        Ejecuta el BLOQUEO ATÓMICO de stock en Catalog Service (Fase 2 de la reserva).
-        Invoca PATCH /products/{product_id}/stock con acción 'block'.
-        """
+    def block_stock(self, product_id: int, quantity: int, branch_id: Optional[int] = None) -> Dict[str, Any]:
+        """Ejecuta el BLOQUEO ATÓMICO de stock por sede en Catalog Service."""
         url = f"{self.base_url}/products/{product_id}/stock"
-        payload = {"quantity": quantity, "action": "block"}
+        payload: Dict[str, Any] = {"quantity": quantity, "action": "block"}
+        if branch_id is not None:
+            payload["branch_id"] = branch_id
 
         try:
             with httpx.Client(timeout=self.timeout) as client:
@@ -64,7 +66,11 @@ class CatalogServiceClient:
                     detail = response.json().get("detail", "Stock insuficiente")
                     raise ValueError(detail)
                 elif response.status_code == 404:
-                    raise ValueError(f"Producto ID {product_id} no existe en catálogo")
+                    try:
+                        detail = response.json().get("detail", f"Producto ID {product_id} no disponible en la botica")
+                    except Exception:
+                        detail = f"Producto ID {product_id} no disponible en la botica"
+                    raise ValueError(detail)
                 else:
                     raise RuntimeError(
                         f"Fallo al bloquear stock en Catálogo: {response.status_code} - {response.text}"
@@ -75,16 +81,15 @@ class CatalogServiceClient:
             )
         except httpx.TimeoutException:
             raise RuntimeError(
-                f"Timeout al comunicarse con Catalog Service para bloqueo de stock."
+                "Timeout al comunicarse con Catalog Service para bloqueo de stock."
             )
 
-    def release_stock(self, product_id: int, quantity: int) -> Optional[Dict[str, Any]]:
-        """
-        Ejecuta la TRANSACCIÓN DE COMPENSACIÓN / ROLLBACK (Slide 8).
-        Libera las existencias bloqueadas si la reserva falló a mitad del proceso.
-        """
+    def release_stock(self, product_id: int, quantity: int, branch_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        """Ejecuta la compensación liberando existencias previamente bloqueadas en la sede."""
         url = f"{self.base_url}/products/{product_id}/stock"
-        payload = {"quantity": quantity, "action": "release"}
+        payload: Dict[str, Any] = {"quantity": quantity, "action": "release"}
+        if branch_id is not None:
+            payload["branch_id"] = branch_id
 
         try:
             with httpx.Client(timeout=self.timeout) as client:
@@ -93,6 +98,51 @@ class CatalogServiceClient:
                     return response.json()
                 return None
         except Exception:
-            # En compensación registramos y no bloqueamos para permitir recuperación
             return None
 
+
+class PaymentsServiceClient:
+    """
+    Cliente síncrono basado en HTTPX para invocar cobros y reembolsos en
+    el Microservicio de Pagos Online (Payments Service :8004).
+    """
+
+    def __init__(self, base_url: str = PAYMENTS_SERVICE_URL, timeout: float = 8.0):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def charge(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.base_url}/payments/charge"
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(url, json=payload)
+                if response.status_code in (200, 201):
+                    return response.json()
+                if response.status_code in (400, 402, 422):
+                    try:
+                        detail = response.json().get("detail", "Pago rechazado por la pasarela.")
+                    except Exception:
+                        detail = "Pago rechazado por la pasarela."
+                    raise PaymentDeclinedError(str(detail))
+                raise RuntimeError(
+                    f"Respuesta inesperada de Payments Service ({response.status_code})."
+                )
+        except httpx.ConnectError:
+            raise RuntimeError(
+                f"No se pudo conectar con el servicio de pagos en {self.base_url}."
+            )
+        except httpx.TimeoutException:
+            raise RuntimeError(
+                "Tiempo de espera agotado al procesar el pago online."
+            )
+
+    def refund(self, payment_id: int, reason: str = "Compensación de orden") -> Optional[Dict[str, Any]]:
+        url = f"{self.base_url}/payments/{payment_id}/refund"
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(url, json={"reason": reason})
+                if response.status_code == 200:
+                    return response.json()
+                return None
+        except Exception:
+            return None

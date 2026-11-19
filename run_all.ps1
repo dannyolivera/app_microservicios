@@ -10,6 +10,9 @@ Start-Sleep -Seconds 1
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot\orders_service'; & '$pythonExe' -m uvicorn main:app --host 127.0.0.1 --port 8003 --reload"
 Start-Sleep -Seconds 1
 
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot\payments_service'; & '$pythonExe' -m uvicorn main:app --host 127.0.0.1 --port 8004 --reload"
+Start-Sleep -Seconds 1
+
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot\frontend'; npm run dev"
 
 Write-Host "==========================================================" -ForegroundColor Green
@@ -17,5 +20,6 @@ Write-Host "Todos los microservicios han sido lanzados exitosamente:" -Foregroun
 Write-Host "  - Catalogo:  http://127.0.0.1:8001/docs" -ForegroundColor Yellow
 Write-Host "  - Usuarios:  http://127.0.0.1:8002/docs" -ForegroundColor Yellow
 Write-Host "  - Pedidos:   http://127.0.0.1:8003/docs" -ForegroundColor Yellow
+Write-Host "  - Pagos:     http://127.0.0.1:8004/docs" -ForegroundColor Yellow
 Write-Host "  - Frontend:  http://localhost:5173" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Green

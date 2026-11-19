@@ -1,58 +1,101 @@
-from sqlalchemy import Column, Integer, String, Text, Numeric, ForeignKey
+from sqlalchemy import (
+    Boolean,
+    Column,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from database import Base
 
 # =============================================================================
-# MODELOS ORM PARA EL CATÁLOGO DE PRODUCTOS (FARMACIA)
+# MODELOS ORM PARA CATÁLOGO E INVENTARIO POR SEDE (FARMACIA)
 # =============================================================================
 
 class Category(Base):
     """
-    Modelo representativo de las categorías de productos farmacéuticos
-    (Ejemplos: Medicamentos, Cuidado Personal, Vitaminas y Suplementos).
+    Modelo representativo de las categorías de productos farmacéuticos.
     """
     __tablename__ = "categories"
 
-    # Clave primaria autoincremental
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    
-    # Nombre único de la categoría farmacéutica
     name = Column(String(100), nullable=False, unique=True, index=True)
-    
-    # Descripción detallada de la categoría
     description = Column(Text, nullable=True)
 
-    # Relación uno a muchos: Una categoría contiene múltiples productos
     products = relationship("Product", back_populates="category", cascade="all, delete-orphan")
+
+
+class Branch(Base):
+    """
+    Modelo representativo de cada botica física (sede) con inventario propio.
+    """
+    __tablename__ = "branches"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    code = Column(String(30), nullable=False, unique=True, index=True)
+    name = Column(String(150), nullable=False, unique=True, index=True)
+    address = Column(String(200), nullable=True)
+    district = Column(String(100), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    inventory_items = relationship(
+        "BranchInventory",
+        back_populates="branch",
+        cascade="all, delete-orphan",
+    )
 
 
 class Product(Base):
     """
-    Modelo representativo de los productos farmacéuticos y de botica.
-    Almacena información de precios, stock disponible y categoría asociada.
+    Modelo representativo del catálogo maestro de productos farmacéuticos.
+    El campo `stock` mantiene el consolidado global; la disponibilidad real
+    por botica reside en `branch_inventory`.
     """
     __tablename__ = "products"
 
-    # Clave primaria autoincremental
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    
-    # Nombre del producto (Ej: 'Paracetamol 500mg - Caja 20 tabletas')
     name = Column(String(150), nullable=False, index=True)
-    
-    # Descripción médica o del principio activo / presentación
     description = Column(Text, nullable=True)
-    
-    # Precio unitario en moneda local (PEN) con precisión de 2 decimales
     price = Column(Numeric(10, 2), nullable=False)
-    
-    # Cantidad de unidades disponibles en inventario
     stock = Column(Integer, nullable=False, default=0)
-    
-    # Sede o botica física donde se encuentra el inventario (Click & Collect)
     branch = Column(String(150), nullable=True, default="Sede Inkafarma - Miraflores")
-
-    # Clave foránea que referencia a la categoría correspondiente
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False)
 
-    # Relación inversa hacia la categoría
     category = relationship("Category", back_populates="products")
+    inventory_items = relationship(
+        "BranchInventory",
+        back_populates="product",
+        cascade="all, delete-orphan",
+    )
+
+
+class BranchInventory(Base):
+    """
+    Inventario y disponibilidad independiente de un producto en una botica específica.
+    """
+    __tablename__ = "branch_inventory"
+    __table_args__ = (
+        UniqueConstraint("branch_id", "product_id", name="uq_branch_product"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    branch_id = Column(
+        Integer,
+        ForeignKey("branches.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("products.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stock = Column(Integer, nullable=False, default=0)
+    is_available = Column(Boolean, nullable=False, default=True)
+
+    branch = relationship("Branch", back_populates="inventory_items")
+    product = relationship("Product", back_populates="inventory_items")

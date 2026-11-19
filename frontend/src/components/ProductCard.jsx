@@ -19,23 +19,24 @@ export default function ProductCard({ product, categoryName, onAddToCart }) {
   const price = Number(product.price).toFixed(2);
   const isOutOfStock = product.stock <= 0;
   const isLowStock = product.stock > 0 && product.stock <= 5;
+  const effectiveQuantity = isOutOfStock ? 1 : Math.min(quantity, product.stock);
 
   const handleAdd = () => {
     if (isOutOfStock) return;
-    onAddToCart(product, quantity);
+    onAddToCart(product, effectiveQuantity);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1200);
   };
 
   const handleIncrement = () => {
-    if (quantity < product.stock) {
-      setQuantity((prev) => prev + 1);
+    if (effectiveQuantity < product.stock) {
+      setQuantity(effectiveQuantity + 1);
     }
   };
 
   const handleDecrement = () => {
-    if (quantity > 1) {
-      setQuantity((prev) => prev - 1);
+    if (effectiveQuantity > 1) {
+      setQuantity(effectiveQuantity - 1);
     }
   };
 
@@ -96,7 +97,7 @@ export default function ProductCard({ product, categoryName, onAddToCart }) {
             S/ {price}
           </span>
           <span className="text-[10px] font-medium text-slate-400">
-            Pago presencial
+            Online o en caja
           </span>
         </div>
 
@@ -106,19 +107,19 @@ export default function ProductCard({ product, categoryName, onAddToCart }) {
             <button
               type="button"
               onClick={handleDecrement}
-              disabled={quantity <= 1 || isOutOfStock}
+              disabled={effectiveQuantity <= 1 || isOutOfStock}
               className="p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               aria-label="Disminuir cantidad"
             >
               <Minus className="w-3 h-3" />
             </button>
             <span className="w-7 text-center text-xs font-bold text-slate-800 select-none">
-              {quantity}
+              {effectiveQuantity}
             </span>
             <button
               type="button"
               onClick={handleIncrement}
-              disabled={quantity >= product.stock || isOutOfStock}
+              disabled={effectiveQuantity >= product.stock || isOutOfStock}
               className="p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               aria-label="Aumentar cantidad"
             >

@@ -1,13 +1,13 @@
 # Guía de Instalación y Ejecución Paso a Paso
-## Sistema de Microservicios E-Commerce Farmacéutico
+## Sistema de Microservicios Farmacéutico Inkafarma
 
-Este documento contiene las instrucciones precisas para configurar la base de datos MySQL, aplicar las migraciones con Alembic, levantar los 3 microservicios independientes en FastAPI y ejecutar la aplicación Frontend con React y Tailwind CSS v3.
+Este documento contiene las instrucciones precisas para configurar las bases de datos MySQL, preparar el entorno Python, levantar los 4 microservicios independientes en FastAPI y ejecutar el Frontend con React y Tailwind CSS v3.
 
 ---
 
 ### 📋 Requisitos Previos
 
-- **Python 3.10 o superior** (verificar con `python --version` o `python3 --version`)
+- **Python 3.10 o superior** (verificar con `python --version`)
 - **MySQL Server 8.0+**
 - **Node.js 18+** (para el frontend)
 
@@ -19,7 +19,7 @@ Abra PowerShell en la carpeta raíz del proyecto (`app_microservicios`):
 
 ```powershell
 # 1. Crear el entorno virtual con Python 3
-python -m venv venv   # O use python3 según corresponda en su sistema
+python -m venv venv
 
 # 2. Activar el entorno virtual en PowerShell
 .\venv\Scripts\Activate.ps1
@@ -28,128 +28,125 @@ python -m venv venv   # O use python3 según corresponda en su sistema
 # Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass)
 
 # 3. Actualizar pip e instalar todas las dependencias
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
 ---
 
-## Paso 2: Crear las Bases de Datos en MySQL (Database-per-Service)
+## Paso 2: Crear las 4 Bases de Datos en MySQL (Database-per-Service)
 
-Asegúrese de que el servicio MySQL esté corriendo (XAMPP, MySQL Workbench, DBeaver o servicio de Windows).
+Asegúrese de que el servicio MySQL esté corriendo (MySQL Server, MySQL Workbench, XAMPP o DBeaver).
 
 ### Opción A: Desde consola PowerShell
 ```powershell
 mysql -u root -p < init_db.sql
 ```
 
-### Opción B: Copiar y pegar en MySQL Workbench o phpMyAdmin
+### Opción B: Copiar y pegar en MySQL Workbench
 Abra el archivo `init_db.sql` y ejecute:
 ```sql
 CREATE DATABASE IF NOT EXISTS `db_catalogo_inka` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS `db_usuarios_inka` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS `db_pedidos_inka` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS `db_pagos_inka` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 ---
 
-## Paso 3: Aplicar Migraciones con Alembic
+## Paso 3: Configurar `.env` y Cargar Datos Semilla
 
-Cada microservicio gestiona su propia base de datos de manera independiente:
+1. **Variables de entorno (`.env`):**
+   Copie el archivo `.env.example` como `.env` dentro de cada uno de los 4 servicios (`catalog_service`, `users_service`, `orders_service`, `payments_service`) y coloque su contraseña de MySQL en **ambas líneas**: `DB_PASSWORD` y `DATABASE_URL` (si solo edita `DB_PASSWORD` y deja `root:@localhost` en `DATABASE_URL`, SQLAlchemy seguirá fallando al conectar).
+   - En `orders_service/.env` asegure `CATALOG_SERVICE_URL=http://localhost:8001` y `PAYMENTS_SERVICE_URL=http://localhost:8004`.
+   - En `payments_service/.env` deje `PAYMENT_PROVIDER=mock` para pruebas locales (o `culqi` con `CULQI_PUBLIC_KEY` y `CULQI_SECRET_KEY` para Culqi Sandbox).
 
-```powershell
-# 1. Migraciones del Catálogo (db_catalogo_inka)
-cd catalog_service
-python3 -m alembic upgrade head
-cd ..
+2. **Datos semilla (Recomendado):**
+   Ejecute `seed_data.sql` en MySQL para cargar categorías, las 3 boticas, 8 productos y el inventario independiente por sede:
+   ```powershell
+   mysql -u root -p < seed_data.sql
+   ```
 
-# 2. Migraciones de Usuarios (db_usuarios_inka)
-cd users_service
-python3 -m alembic upgrade head
-cd ..
-
-# 3. Migraciones de Pedidos (db_pedidos_inka)
-cd orders_service
-python3 -m alembic upgrade head
-cd ..
-```
-
-*(Opcional para presentación inmediata)*: Si desea cargar medicamentos reales (Paracetamol, Ibuprofeno, etc.) y un usuario de prueba con stock inicial, ejecute en MySQL el script:
-```powershell
-mysql -u root -p < seed_data.sql
-```
+3. **Tablas y migraciones:**
+   Al arrancar cada servicio con `uvicorn`, SQLAlchemy crea y actualiza automáticamente las tablas necesarias (`Base.metadata.create_all` y `ensure_*_schema`). Si desea ejecutar Alembic manualmente (luego de instalar `requirements.txt`), entre a la carpeta del servicio y use **`alembic upgrade head`** *(sin `python -m`, para no colisionar con la carpeta local `alembic/`)*.
 
 ---
 
-## Paso 4: Levantar los 3 Microservicios Backend con Uvicorn
+## Paso 4: Levantar los 4 Microservicios + Frontend
 
-Abra **tres terminales de PowerShell separadas** (todas con `.\venv\Scripts\Activate.ps1` activado):
-
-### 🟢 Terminal 1 - Microservicio de Catálogo
+### Opción A: Lanzamiento automático (Recomendado)
+Desde la raíz `app_microservicios` (levanta los 4 microservicios + frontend; también existen scripts individuales `run_catalog.*`, `run_users.*`, `run_orders.*`, `run_payments.*` y `run_frontend.bat`):
 ```powershell
-cd catalog_service
-python3 -m uvicorn main:app --host 127.0.0.1 --port 8001 --reload
+.\run_all.ps1
 ```
-- **Swagger UI:** [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+*(O en CMD: `.\run_all.bat`)*
 
-### 🔵 Terminal 2 - Microservicio de Usuarios y Autenticación
-```powershell
-cd users_service
-python3 -m uvicorn main:app --host 127.0.0.1 --port 8002 --reload
-```
-- **Swagger UI:** [http://127.0.0.1:8002/docs](http://127.0.0.1:8002/docs)
+### Opción B: Manual en terminales separadas (todas con `.\venv\Scripts\Activate.ps1`)
 
-### 🟠 Terminal 3 - Microservicio de Pedidos / Órdenes
-```powershell
-cd orders_service
-python3 -m uvicorn main:app --host 127.0.0.1 --port 8003 --reload
-```
-- **Swagger UI:** [http://127.0.0.1:8003/docs](http://127.0.0.1:8003/docs)
+- **Terminal 1 — Catálogo y Sedes (`:8001`):**
+  ```powershell
+  cd catalog_service
+  ..\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8001 --reload
+  ```
+  Swagger UI: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
+
+- **Terminal 2 — Usuarios y Auth (`:8002`):**
+  ```powershell
+  cd users_service
+  ..\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8002 --reload
+  ```
+  Swagger UI: [http://127.0.0.1:8002/docs](http://127.0.0.1:8002/docs)
+
+- **Terminal 3 — Coordinador de Pedidos (`:8003`):**
+  ```powershell
+  cd orders_service
+  ..\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8003 --reload
+  ```
+  Swagger UI: [http://127.0.0.1:8003/docs](http://127.0.0.1:8003/docs)
+
+- **Terminal 4 — Pagos Online (`:8004`):**
+  ```powershell
+  cd payments_service
+  ..\venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8004 --reload
+  ```
+  Swagger UI: [http://127.0.0.1:8004/docs](http://127.0.0.1:8004/docs)
 
 ---
 
-## Paso 5: Levantar el Frontend (React + Tailwind CSS v3)
-
-Abra una **cuarta terminal de PowerShell** para el cliente web:
+## Paso 5: Preparar y Levantar el Frontend (React + Tailwind CSS v3)
 
 ```powershell
-# 1. Ingresar a la carpeta del frontend
 cd frontend
-
-# 2. Instalar dependencias de Node.js (ya preinstaladas, o si clona en otra máquina)
 npm install --legacy-peer-deps
-
-# 3. Iniciar el servidor de desarrollo Vite
 npm run dev
 ```
-
-- **Acceso a la Tienda Web:** [http://localhost:5173](http://localhost:5173)
+Acceso web: [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## Paso 6: Demostración Académica Completa desde el Frontend
+## Paso 6: Demostración Funcional Completa
 
-1. **Visualizar Catálogo:**
-   - La página principal consulta automáticamente a `http://localhost:8001/products/` y `http://localhost:8001/categories/`.
-   - Se muestran los productos farmacéuticos con sus precios en soles (PEN), presentación y etiquetas de stock en tiempo real.
-   - Cuenta con filtros por categoría (Medicamentos, Cuidado Personal, Vitaminas) y barra de búsqueda reactiva.
+1. **Cambiar de Botica:** Seleccione *Miraflores*, *San Isidro* o *Lima Centro* en el selector superior. Verá que los productos disponibles y sus cantidades cambian de forma independiente en cada sede.
+2. **Registrarse / Iniciar Sesión:** Use la pestaña **"Registrarme"** (o el botón *"Usar cuenta de prueba para demostración"* en la pestaña **"Registrarme"** la primera vez) para crear su usuario con hash `bcrypt` y recibir su JWT.
+3. **Pagar en Botica al Recoger (`RESERVED`):**
+   - Agregue productos al carrito y elija *"Pagar en botica al recoger"*.
+   - `:8003` valida disponibilidad en la sede elegida, bloquea stock en `:8001` y emite el código `INKA-CC-XXXXX` en estado `RESERVED`.
+4. **Pagar Online y Recoger en Botica (`PAID`):**
+   - Elija *"Pagar online y recoger en botica"* y pruebe con tarjeta `4242 4242 4242 4242` (`12/2028`, CVV `123`) o Yape (`999888777`, código `123456`).
+   - `:8003` bloquea primero el stock en `:8001`, luego cobra en `:8004` y registra la orden en estado **`PAID`** con número de operación `PAY-INKA-...`.
+5. **Probar devolución automática de stock si el pago es rechazado:**
+   - Intente pagar online con una tarjeta terminada en **`0002`** (ej. `4000 0000 0000 0002`), **`0069`** / **`9995`**, o Yape código **`000000`**.
+   - El sistema rechazará con `HTTP 402` y devolverá automáticamente el stock bloqueado en la sede.
 
-2. **Iniciar Sesión:**
-   - Haga clic en el botón **"Iniciar Sesión"** en la barra superior.
-   - Puede usar el botón de un solo clic: **"Rellenar datos de prueba para demostración"** para cargar credenciales automáticas, o crear una cuenta nueva en la pestaña **"Registrarse"** (se almacena con hash `bcrypt` en `db_usuarios_inka` puerto `8002`).
-   - Al iniciar sesión, se recibe el token JWT y los datos del usuario se muestran en la barra de navegación.
+### Tabla rápida de inventario inicial por botica
 
-3. **Agregar al Carrito y Procesar Pedido:**
-   - Seleccione la cantidad deseada de uno o varios medicamentos y haga clic en **"Agregar"**.
-   - Abra el carrito lateral.
-   - Haga clic en **"Procesar Orden de Compra"**.
-   - **Flujo de Microservicios en Acción:**
-     - El frontend envía la solicitud al **Microservicio de Pedidos (`:8003`)**.
-     - El Microservicio de Pedidos hace una consulta síncrona mediante **`httpx`** al **Microservicio de Catálogo (`:8001`)** para certificar que cada medicina exista y cuente con stock suficiente.
-     - Si hay stock, se asienta la orden en `db_pedidos_inka` con estado `COMPLETED`.
-     - El frontend muestra el modal de éxito con el **ID de la Orden**, desglose de medicamentos y confirmación de la validación inter-servicio.
-     - El catálogo se refresca automáticamente mostrando los nuevos niveles de inventario.
-
-4. **Validación de Reglas de Negocio y Fallos (Casos Borde):**
-   - **Caso Stock Insuficiente:** Si solicita una cantidad superior al stock disponible, el microservicio de órdenes rechaza la transacción con un error `HTTP 400 Bad Request` indicando el producto y la cantidad disponible real.
-   - **Caso Servicio Apagado:** Si apaga la terminal del puerto 8001 (Catálogo) e intenta procesar una orden, el microservicio de pedidos captura la caída y retorna un `HTTP 503 Service Unavailable` controlado. La barra de estado superior del frontend marcará el microservicio en rojo automáticamente.
+| Producto | Miraflores (`1`) | San Isidro (`2`) | Lima Centro (`3`) |
+| :--- | :---: | :---: | :---: |
+| Paracetamol 500mg | `50` | `18` | `85` |
+| Ibuprofeno 400mg | `30` | `4` | `0` *(Agotado)* |
+| Amoxicilina 500mg | `20` | *No disponible* | `3` |
+| Protector Solar FPS 50+ | `15` | `28` | *No disponible* |
+| Vitamina C + Zinc | `40` | `22` | `16` |
+| Alcohol Medicinal 70° | *No disponible* | `35` | `25` |
+| Loratadina 10mg | *No disponible* | `14` | `19` |
+| Colágeno Hidrolizado | `12` | *No disponible* | *No disponible* |

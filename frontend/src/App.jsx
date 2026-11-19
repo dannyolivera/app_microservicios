@@ -5,6 +5,7 @@ import CartDrawer from "./components/CartDrawer";
 import AuthModal from "./components/AuthModal";
 import OrderSuccessModal from "./components/OrderSuccessModal";
 import {
+  getBranches,
   getCategories,
   getProducts,
   createOrder,
@@ -29,21 +30,45 @@ import {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-const BRANCHES = [
-  "Inkafarma Miraflores (Av. Larco 450)",
-  "Inkafarma San Isidro (Av. Javier Prado 1200)",
-  "Inkafarma Lima Centro (Jr. de la Unión 600)",
+const DEFAULT_BRANCHES = [
+  {
+    id: 1,
+    code: "INKA-MIR",
+    name: "Inkafarma Miraflores (Av. Larco 450)",
+    address: "Av. Larco 450",
+    district: "Miraflores",
+  },
+  {
+    id: 2,
+    code: "INKA-SIS",
+    name: "Inkafarma San Isidro (Av. Javier Prado 1200)",
+    address: "Av. Javier Prado 1200",
+    district: "San Isidro",
+  },
+  {
+    id: 3,
+    code: "INKA-LIM",
+    name: "Inkafarma Lima Centro (Jr. de la Unión 600)",
+    address: "Jr. de la Unión 600",
+    district: "Lima Centro",
+  },
 ];
 
 export default function App() {
-  // Estado de Datos del Catálogo y Sedes
+  // Estado de Datos del Catálogo y Sedes Independientes
+  const [branches, setBranches] = useState(DEFAULT_BRANCHES);
+  const [selectedBranchId, setSelectedBranchId] = useState(1);
+  const [branchSwitchNotice, setBranchSwitchNotice] = useState("");
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedBranch, setSelectedBranch] = useState(BRANCHES[0]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+
+  const selectedBranchObj =
+    branches.find((b) => b.id === selectedBranchId) || branches[0];
+  const selectedBranch = selectedBranchObj.name;
 
   // Estado del Carrito de Compras
   const [cart, setCart] = useState(() => {
@@ -76,7 +101,12 @@ export default function App() {
   const [loadingReservations, setLoadingReservations] = useState(false);
 
   // Estado de Conectividad con Microservicios
-  const [health, setHealth] = useState({ catalog: true, users: true, orders: true });
+  const [health, setHealth] = useState({
+    catalog: true,
+    users: true,
+    orders: true,
+    payments: true,
+  });
 
   // Guardar carrito en localStorage
   useEffect(() => {
@@ -87,8 +117,8 @@ export default function App() {
     }
   }, [cart]);
 
-  // Cargar catálogo y estado de servicios
-  const loadData = async () => {
+  // Cargar catálogo por sede y estado de servicios
+  const loadBranchProducts = async (branchId = selectedBranchId) => {
     setIsLoading(true);
     setLoadError("");
 
@@ -96,11 +126,15 @@ export default function App() {
     setHealth(healthStatus);
 
     try {
-      const [catsData, prodsData] = await Promise.all([
+      const [branchesData, catsData, prodsData] = await Promise.all([
+        getBranches().catch(() => null),
         getCategories().catch(() => []),
-        getProducts(0, 100).catch(() => ({ items: [] })),
+        getProducts(0, 100, branchId).catch(() => ({ items: [] })),
       ]);
 
+      if (Array.isArray(branchesData) && branchesData.length > 0) {
+        setBranches(branchesData);
+      }
       setCategories(catsData);
       setProducts(prodsData.items || []);
     } catch {
@@ -113,15 +147,71 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+
+    async function initStorefront() {
+      const healthStatus = await checkMicroservicesHealth();
+      if (cancelled) return;
+      setHealth(healthStatus);
+
+      try {
+        const [branchesData, catsData, prodsData] = await Promise.all([
+          getBranches().catch(() => null),
+          getCategories().catch(() => []),
+          getProducts(0, 100, 1).catch(() => ({ items: [] })),
+        ]);
+        if (cancelled) return;
+        if (Array.isArray(branchesData) && branchesData.length > 0) {
+          setBranches(branchesData);
+        }
+        setCategories(catsData);
+        setProducts(prodsData.items || []);
+      } catch {
+        if (!cancelled) {
+          setLoadError(
+            "No se pudo cargar el catálogo de productos. Por favor verifica tu conexión o intenta nuevamente."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    initStorefront();
 
     const interval = setInterval(async () => {
       const h = await checkMicroservicesHealth();
-      setHealth(h);
+      if (!cancelled) {
+        setHealth(h);
+      }
     }, 25000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
+
+  const handleChangeBranch = (newBranchId) => {
+    const nextId = Number(newBranchId);
+    if (!nextId || nextId === selectedBranchId) return;
+
+    setSelectedBranchId(nextId);
+    setCheckoutError("");
+
+    if (cart.length > 0) {
+      setCart([]);
+      setBranchSwitchNotice(
+        "Actualizamos tu carrito porque cada botica maneja un stock y surtido independiente."
+      );
+    } else {
+      setBranchSwitchNotice("");
+    }
+
+    loadBranchProducts(nextId);
+  };
 
   // Manejo de Autenticación
   const handleAuthSuccess = (userData, token) => {
@@ -180,8 +270,11 @@ export default function App() {
     setCart([]);
   };
 
-  // Procesar Checkout Click & Collect (consumo orquestado de orders_service)
-  const handleCheckout = async () => {
+  // Procesar Checkout (pago presencial en botica o pago online con orden)
+  const handleCheckout = async (
+    paymentMethod = "PAGO_EN_CAJA_PRESENCIAL",
+    paymentDetails = null
+  ) => {
     if (!user) {
       setIsAuthOpen(true);
       return;
@@ -195,12 +288,21 @@ export default function App() {
     try {
       const payload = {
         user_id: user.id,
+        branch_id: selectedBranchId,
         branch: selectedBranch,
+        payment_method: paymentMethod,
         items: cart.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
         })),
       };
+
+      if (paymentMethod === "PAGO_ONLINE" && paymentDetails) {
+        payload.payment_details = {
+          ...paymentDetails,
+          email: user.email,
+        };
+      }
 
       const createdOrder = await createOrder(payload);
 
@@ -208,10 +310,10 @@ export default function App() {
       setIsCartOpen(false);
       setLastOrder(createdOrder);
 
-      // Refrescar inventario en vivo tras el descuento atómico de stock
-      loadData();
+      // Refrescar inventario de la sede activa tras el descuento de stock
+      loadBranchProducts(selectedBranchId);
     } catch (err) {
-      setCheckoutError(err.message || "No se pudo procesar la reserva. Inténtalo nuevamente.");
+      setCheckoutError(err.message || "No se pudo procesar el pedido. Inténtalo nuevamente.");
     } finally {
       setIsProcessingOrder(false);
     }
@@ -277,9 +379,10 @@ export default function App() {
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         health={health}
+        selectedBranchId={selectedBranchId}
         selectedBranch={selectedBranch}
-        onChangeBranch={setSelectedBranch}
-        branches={BRANCHES}
+        onChangeBranch={handleChangeBranch}
+        branches={branches}
         categories={categories}
         selectedCategoryId={selectedCategoryId}
         onSelectCategory={setSelectedCategoryId}
@@ -299,7 +402,7 @@ export default function App() {
               <span>Retiro en Botica GRATIS</span>
             </span>
             <span className="text-xs text-slate-500 font-medium">
-              Reserva en línea y paga al recoger en mostrador
+              Paga online con tarjeta o Yape, o reserva y paga al recoger
             </span>
           </div>
 
@@ -308,13 +411,13 @@ export default function App() {
               <span className="text-slate-500 shrink-0">Botica:</span>
               <select
                 aria-label="Cambiar botica de recojo"
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
+                value={selectedBranchId}
+                onChange={(e) => handleChangeBranch(Number(e.target.value))}
                 className="font-bold text-slate-900 bg-[#F6F8F7] hover:bg-emerald-50/70 border border-slate-200 focus:border-[#008446] rounded-xl px-3 py-1.5 text-xs outline-none transition-colors cursor-pointer"
               >
-                {BRANCHES.map((branch) => (
-                  <option key={branch} value={branch}>
-                    {branch}
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
                   </option>
                 ))}
               </select>
@@ -322,10 +425,24 @@ export default function App() {
 
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-700 shrink-0">
               <Coins className="w-3.5 h-3.5 text-[#008446]" />
-              <span>Pago en caja (Efectivo o POS)</span>
+              <span>Pago online o en caja</span>
             </span>
           </div>
         </section>
+
+        {branchSwitchNotice && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 text-xs text-emerald-900">
+            <span className="font-medium">{branchSwitchNotice}</span>
+            <button
+              type="button"
+              onClick={() => setBranchSwitchNotice("")}
+              className="p-1 text-emerald-700 hover:text-emerald-950 rounded-full"
+              aria-label="Cerrar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* 2. Hero asimétrico de 2 columnas estilo Stitch */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
@@ -342,15 +459,15 @@ export default function App() {
             <div className="relative z-10 max-w-xl space-y-4">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFD200] text-slate-900 text-[11px] font-black tracking-wide uppercase">
                 <Store className="w-3.5 h-3.5" />
-                <span>Retiro en Botica • Pago en Tienda</span>
+                <span>Retiro en Botica • Pago Online o en Caja</span>
               </span>
 
               <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight">
-                Reserva tus Medicamentos y Recoge en Botica
+                Reserva o Paga Online y Recoge en Botica
               </h1>
 
               <p className="text-xs sm:text-sm text-emerald-50/95 leading-relaxed max-w-lg">
-                Aparta tus productos farmacéuticos en segundos con stock confirmado al instante. Obtén tu código único <strong className="text-white">INKA-CC</strong> y paga directamente en caja al recoger.
+                Aparta tus productos farmacéuticos en segundos con stock confirmado al instante. Obtén tu código único <strong className="text-white">INKA-CC</strong> y elige pagar en línea o directamente en caja al recoger.
               </p>
             </div>
 
@@ -400,10 +517,10 @@ export default function App() {
             >
               <div className="space-y-1.5">
                 <span className="inline-block px-2.5 py-0.5 rounded-md bg-[#FFD200] text-slate-900 text-[10px] font-black uppercase tracking-wider">
-                  Sin pagos online
+                  Tu historial al instante
                 </span>
                 <h2 className="text-base font-extrabold text-slate-900 group-hover:text-[#006837] transition-colors">
-                  Mis Reservas y Códigos
+                  Mis Reservas y Pedidos
                 </h2>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   Revisa tus códigos INKA-CC y el estado de tus pedidos para recojo en botica.
@@ -427,7 +544,7 @@ export default function App() {
             </div>
             <button
               type="button"
-              onClick={loadData}
+              onClick={() => loadBranchProducts(selectedBranchId)}
               className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shrink-0 transition-colors"
             >
               Reintentar
@@ -623,10 +740,10 @@ export default function App() {
             </div>
             <div>
               <h3 className="text-sm font-extrabold text-slate-900">
-                Pago Presencial en Caja
+                Pago Online o Presencial
               </h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Sin tarjetas ni pasarelas por internet: liquida el monto exacto en efectivo o POS al retirar tus medicamentos.
+                Paga en línea con tarjeta o Yape, o liquida directamente en caja (efectivo o POS) al retirar tus medicamentos.
               </p>
             </div>
           </div>
@@ -676,21 +793,21 @@ export default function App() {
                 Boticas Habilitadas
               </h4>
               <ul className="space-y-1.5">
-                {BRANCHES.map((branch) => (
-                  <li key={branch}>
+                {branches.map((branch) => (
+                  <li key={branch.id}>
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedBranch(branch);
+                        handleChangeBranch(branch.id);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
                       className={`text-left transition-colors ${
-                        selectedBranch === branch
+                        selectedBranchId === branch.id
                           ? "text-[#008446] font-bold"
                           : "text-slate-500 hover:text-[#008446]"
                       }`}
                     >
-                      {branch}
+                      {branch.name}
                     </button>
                   </li>
                 ))}
@@ -712,10 +829,10 @@ export default function App() {
                 <div className="p-3 rounded-xl bg-[#F6F8F7] border border-slate-200/80 space-y-1">
                   <div className="flex items-center gap-1.5 font-bold text-slate-900">
                     <ShieldCheck className="w-3.5 h-3.5 text-[#008446]" />
-                    <span>Pago Presencial Seguro</span>
+                    <span>Pagos Flexibles y Seguros</span>
                   </div>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Paga directamente en caja de la botica al retirar tu pedido en efectivo o con tarjeta (POS).
+                    Paga online con tarjeta o Yape, o directamente en caja al recoger tu pedido en efectivo o con tarjeta (POS).
                   </p>
                 </div>
               </div>
@@ -742,9 +859,10 @@ export default function App() {
         onCheckout={handleCheckout}
         isProcessing={isProcessingOrder}
         checkoutError={checkoutError}
+        selectedBranchId={selectedBranchId}
         selectedBranch={selectedBranch}
-        onChangeBranch={setSelectedBranch}
-        branches={BRANCHES}
+        onChangeBranch={handleChangeBranch}
+        branches={branches}
       />
 
       <AuthModal
@@ -756,7 +874,7 @@ export default function App() {
       <OrderSuccessModal
         order={lastOrder}
         onClose={() => setLastOrder(null)}
-        onOrderUpdated={loadData}
+        onOrderUpdated={() => loadBranchProducts(selectedBranchId)}
       />
 
       {/* Modal de Historial de Reservas (GET /orders/user/{id}) */}
@@ -816,6 +934,8 @@ export default function App() {
                         className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
                           res.status === "COLLECTED"
                             ? "bg-purple-100 text-purple-800"
+                            : res.status === "PAID"
+                            ? "bg-sky-100 text-sky-800"
                             : res.status === "CANCELLED"
                             ? "bg-rose-100 text-[#E30613]"
                             : "bg-emerald-100 text-[#006837]"
@@ -823,6 +943,8 @@ export default function App() {
                       >
                         {res.status === "COLLECTED"
                           ? "Entregado en Botica"
+                          : res.status === "PAID"
+                          ? "Pagado Online • Listo para Recojo"
                           : res.status === "CANCELLED"
                           ? "Cancelado"
                           : "Listo para Recojo"}
@@ -833,6 +955,12 @@ export default function App() {
                       <Store className="w-3.5 h-3.5 text-[#008446] shrink-0" />
                       <span className="truncate">{res.branch || "Sede Miraflores"}</span>
                     </div>
+
+                    {res.payment_reference && (
+                      <p className="text-[10px] text-slate-500 font-mono">
+                        Operación: {res.payment_reference}
+                      </p>
+                    )}
 
                     <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/80 text-slate-700">
                       <span className="text-[10px] text-slate-400">

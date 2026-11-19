@@ -9,25 +9,23 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import engine, get_db, Base, ensure_orders_schema
-from client import CatalogServiceClient
+from client import CatalogServiceClient, PaymentsServiceClient, PaymentDeclinedError
 
 # =============================================================================
 # INICIALIZACIÓN DEL MICROSERVICIO DE PEDIDOS / ÓRDENES (PUERTO 8003)
 # =============================================================================
 
-# Crear tablas si no existen y asegurar compatibilidad de esquema
 Base.metadata.create_all(bind=engine)
 ensure_orders_schema()
 
 app = FastAPI(
-    title="InkaPharmacy - Orders & Reservations Microservice (Click & Collect)",
-    description="Microservicio orquestador para reservas digitales Click & Collect con bloqueo atómico inter-servicio y ticket para retiro en botica.",
-    version="1.1.0",
+    title="InkaPharmacy - Orders & Reservations Microservice",
+    description="Microservicio orquestador de pedidos con bloqueo atómico de stock, pago presencial o pago online con compensación Saga.",
+    version="1.2.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
-# Habilitar CORS para permitir peticiones desde aplicaciones cliente frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,8 +34,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Instancia del cliente HTTP para comunicación inter-servicio con el catálogo
 catalog_client = CatalogServiceClient()
+payments_client = PaymentsServiceClient()
 
 
 def generate_pickup_code() -> str:
@@ -47,70 +45,91 @@ def generate_pickup_code() -> str:
     return f"INKA-CC-{suffix}"
 
 
+def _release_blocked_items(blocked_items_tracker: List[tuple], branch_id: int = 1) -> None:
+    """Ejecuta rollback compensatorio devolviendo todas las unidades bloqueadas en la sede."""
+    for prev_pid, prev_qty in blocked_items_tracker:
+        catalog_client.release_stock(prev_pid, prev_qty, branch_id=branch_id)
+
+
 # =============================================================================
 # ENDPOINT DE SALUD
 # =============================================================================
 
 @app.get("/", tags=["Health"])
 def root_status():
-    """
-    Ruta raíz para verificación rápida de disponibilidad del microservicio.
-    """
+    """Ruta raíz para verificación rápida de disponibilidad del microservicio."""
     return {
         "service": "Orders & Click-and-Collect Service",
         "status": "online",
         "port": 8003,
-        "database": "db_pedidos_inka"
+        "database": "db_pedidos_inka",
     }
 
 
 # =============================================================================
-# ENDPOINTS DE ÓRDENES Y RESERVAS (CLICK & COLLECT)
+# ENDPOINTS DE ÓRDENES Y RESERVAS
 # =============================================================================
 
 @app.post(
     "/orders/",
     response_model=schemas.OrderResponse,
     status_code=status.HTTP_201_CREATED,
-    tags=["Click & Collect Orders"],
-    summary="Orquestación y creación de la orden C&C (con bloqueo atómico de stock)"
+    tags=["Orders"],
+    summary="Orquestación de pedido (Pago en botica o Pago online con compensación Saga)",
 )
 @app.post(
     "/api/v1/orders",
     response_model=schemas.OrderResponse,
     status_code=status.HTTP_201_CREATED,
-    tags=["Click & Collect Orders"],
-    include_in_schema=False
+    tags=["Orders"],
+    include_in_schema=False,
 )
 def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db)):
     """
-    Orquesta la emisión de una reserva Click & Collect (Slides 7, 8 y 9):
-    1. Fase 1: Consulta datos y valida existencias en Catalog Service (:8001).
-    2. Fase 2: Ejecuta bloqueo atómico de stock mediante PATCH /products/{id}/stock.
-       Si algún producto falla por falta de existencias o timeout, ejecuta
-       TRANSACCIÓN DE COMPENSACIÓN (Rollback) liberando el stock bloqueado previamente.
-    3. Fase 3: Emite la orden transaccional con Código Único de Recojo (ej. INKA-CC-XXXX)
-       y estado RESERVED para posterior liquidación presencial en botica.
+    Orquesta el registro de una reserva o compra para retiro en botica:
+    1. Fase 1: Valida existencia y precios vigentes en Catalog Service (:8001).
+    2. Fase 2: Bloquea atómicamente el stock en :8001 (con rollback si algún ítem falla).
+    3. Fase 3: Si payment_method == PAGO_ONLINE, procesa el cobro en Payments Service (:8004).
+       Si el pago es rechazado o el servicio no responde, libera automáticamente el stock bloqueado.
+    4. Fase 4: Persiste la orden con pickup_code en estado RESERVED o PAID.
     """
+    payment_method = (order_in.payment_method or "PAGO_EN_CAJA_PRESENCIAL").upper()
+    if payment_method not in ("PAGO_EN_CAJA_PRESENCIAL", "PAGO_ONLINE"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Modalidad de pago no válida. Use PAGO_EN_CAJA_PRESENCIAL o PAGO_ONLINE.",
+        )
+
+    if payment_method == "PAGO_ONLINE" and not order_in.payment_details:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Se requieren los datos del medio de pago para completar el pago online.",
+        )
+
+    branch_id = order_in.branch_id or 1
+    canonical_branch_name = None
     validated_items_data = []
     blocked_items_tracker = []
     total_amount = Decimal("0.00")
 
-    # 1. Validación de precios y existencia con Catálogo
+    # 1. Validación de precios y disponibilidad por sede con Catálogo
     for item in order_in.items:
         try:
-            product_data = catalog_client.get_product(item.product_id)
+            product_data = catalog_client.get_product(item.product_id, branch_id=branch_id)
         except RuntimeError as err:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=str(err)
+                detail=str(err),
             )
 
         if not product_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"El producto con ID {item.product_id} no existe en el catálogo."
+                detail=f"El producto con ID {item.product_id} no está disponible en la botica seleccionada.",
             )
+
+        if not canonical_branch_name and product_data.get("branch"):
+            canonical_branch_name = product_data.get("branch")
 
         unit_price = Decimal(str(product_data.get("price", "0.00")))
         subtotal = unit_price * item.quantity
@@ -120,75 +139,132 @@ def create_order(order_in: schemas.OrderCreate, db: Session = Depends(get_db)):
             "product_id": item.product_id,
             "quantity": item.quantity,
             "unit_price": unit_price,
-            "name": product_data.get("name", f"Producto #{item.product_id}")
+            "name": product_data.get("name", f"Producto #{item.product_id}"),
         })
 
-    # 2. Bloqueo Atómico de Stock con mecanismo de Compensación (Rollback)
+    # 2. Bloqueo Atómico de Stock en la sede elegida con Compensación si algún ítem falla
     for item_data in validated_items_data:
         try:
-            catalog_client.block_stock(item_data["product_id"], item_data["quantity"])
+            catalog_client.block_stock(
+                item_data["product_id"],
+                item_data["quantity"],
+                branch_id=branch_id,
+            )
             blocked_items_tracker.append((item_data["product_id"], item_data["quantity"]))
         except (ValueError, RuntimeError) as err:
-            # ROLLBACK / COMPENSACIÓN: Revertir todo el stock bloqueado en items previos
-            for prev_pid, prev_qty in blocked_items_tracker:
-                catalog_client.release_stock(prev_pid, prev_qty)
-
+            _release_blocked_items(blocked_items_tracker, branch_id=branch_id)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Transacción abortada: {str(err)}. Se realizó rollback compensatorio de inventario."
+                detail=f"Transacción abortada: {str(err)}. Se realizó rollback compensatorio de inventario.",
             )
 
-    # 3. Persistencia de la orden en db_pedidos_inka
+    # 3. Cobro Online opcional vía Payments Service (:8004)
     pickup_code = generate_pickup_code()
-    branch_name = order_in.branch or "Sede Inkafarma - Miraflores (Av. Larco 450)"
+    branch_name = canonical_branch_name or order_in.branch or "Inkafarma Miraflores (Av. Larco 450)"
 
-    new_order = models.Order(
-        pickup_code=pickup_code,
-        user_id=order_in.user_id,
-        total_amount=total_amount,
-        branch=branch_name,
-        payment_method="PAGO_EN_CAJA_PRESENCIAL",
-        status=models.OrderStatus.RESERVED.value
-    )
-    db.add(new_order)
-    db.flush()
+    order_status = models.OrderStatus.RESERVED.value
+    payment_id = None
+    payment_reference = None
+    payment_status = "PENDING_IN_STORE"
 
-    for item_data in validated_items_data:
-        order_item = models.OrderItem(
-            order_id=new_order.id,
-            product_id=item_data["product_id"],
-            quantity=item_data["quantity"],
-            unit_price=item_data["unit_price"]
+    if payment_method == "PAGO_ONLINE":
+        details = order_in.payment_details
+        charge_payload = {
+            "user_id": order_in.user_id,
+            "amount": str(total_amount.quantize(Decimal("0.01"))),
+            "currency": "PEN",
+            "email": details.email,
+            "order_reference": pickup_code,
+            "method_type": details.method_type,
+            "card_number": details.card_number,
+            "card_holder": details.card_holder,
+            "exp_month": details.exp_month,
+            "exp_year": details.exp_year,
+            "cvv": details.cvv,
+            "yape_phone": details.yape_phone,
+            "yape_code": details.yape_code,
+            "culqi_token": details.culqi_token,
+        }
+        try:
+            payment_result = payments_client.charge(charge_payload)
+            payment_id = payment_result.get("id")
+            payment_reference = payment_result.get("transaction_code")
+            payment_status = "PAID_ONLINE"
+            order_status = models.OrderStatus.PAID.value
+        except PaymentDeclinedError as err:
+            _release_blocked_items(blocked_items_tracker, branch_id=branch_id)
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Pago rechazado: {str(err)} No se realizó ningún cobro y el stock fue liberado.",
+            )
+        except RuntimeError as err:
+            _release_blocked_items(blocked_items_tracker, branch_id=branch_id)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Pasarela de pagos no disponible: {str(err)} El stock bloqueado fue liberado.",
+            )
+
+    # 4. Persistencia de la orden en db_pedidos_inka con compensación si falla DB
+    try:
+        new_order = models.Order(
+            pickup_code=pickup_code,
+            user_id=order_in.user_id,
+            total_amount=total_amount,
+            branch_id=branch_id,
+            branch=branch_name,
+            payment_method=payment_method,
+            payment_id=payment_id,
+            payment_reference=payment_reference,
+            payment_status=payment_status,
+            status=order_status,
         )
-        db.add(order_item)
+        db.add(new_order)
+        db.flush()
 
-    db.commit()
-    db.refresh(new_order)
-    return new_order
+        for item_data in validated_items_data:
+            order_item = models.OrderItem(
+                order_id=new_order.id,
+                product_id=item_data["product_id"],
+                quantity=item_data["quantity"],
+                unit_price=item_data["unit_price"],
+            )
+            db.add(order_item)
+
+        db.commit()
+        db.refresh(new_order)
+        return new_order
+    except Exception as err:
+        db.rollback()
+        _release_blocked_items(blocked_items_tracker, branch_id=branch_id)
+        if payment_id:
+            payments_client.refund(
+                payment_id,
+                "Compensación automática por error al registrar la orden.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al registrar la orden: {str(err)}. Se revirtió inventario y pago.",
+        )
 
 
 @app.get(
     "/orders/{order_id}",
     response_model=schemas.OrderResponse,
-    tags=["Click & Collect Orders"],
-    summary="Estado transaccional del ticket de recojo por ID"
+    tags=["Orders"],
+    summary="Estado transaccional del ticket de recojo por ID",
 )
 @app.get(
     "/api/v1/orders/{order_id}",
     response_model=schemas.OrderResponse,
-    tags=["Click & Collect Orders"],
-    include_in_schema=False
+    tags=["Orders"],
+    include_in_schema=False,
 )
 def get_order_by_id(order_id: int, db: Session = Depends(get_db)):
-    """
-    Obtiene los detalles de un ticket de recojo por su ID.
-    Utilizado por el personal de caja en botica para validar el código antes del cobro.
-    """
     order = db.query(models.Order).filter(models.Order.id == order_id).first()
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Orden o reserva con ID {order_id} no encontrada."
+            detail=f"Orden o reserva con ID {order_id} no encontrada.",
         )
     return order
 
@@ -196,68 +272,64 @@ def get_order_by_id(order_id: int, db: Session = Depends(get_db)):
 @app.get(
     "/orders/user/{user_id}",
     response_model=List[schemas.OrderResponse],
-    tags=["Click & Collect Orders"],
-    summary="Historial de reservas realizadas por cliente (Slide 10)"
+    tags=["Orders"],
+    summary="Historial de reservas y compras por cliente",
 )
 @app.get(
     "/api/v1/orders/user/{user_id}",
     response_model=List[schemas.OrderResponse],
-    tags=["Click & Collect Orders"],
-    include_in_schema=False
+    tags=["Orders"],
+    include_in_schema=False,
 )
 def get_orders_by_user(user_id: int, db: Session = Depends(get_db)):
-    """
-    Obtiene el historial de órdenes y reservas Click & Collect realizadas por un cliente.
-    """
-    orders = (
+    return (
         db.query(models.Order)
         .filter(models.Order.user_id == user_id)
         .order_by(models.Order.id.desc())
         .all()
     )
-    return orders
 
 
 @app.get(
     "/orders/",
     response_model=List[schemas.OrderResponse],
-    tags=["Click & Collect Orders"],
-    summary="Listar todas las órdenes registradas"
+    tags=["Orders"],
+    summary="Listar todas las órdenes registradas",
 )
 def list_orders(db: Session = Depends(get_db)):
-    """
-    Obtiene la lista completa de órdenes registradas en el sistema.
-    """
-    orders = db.query(models.Order).order_by(models.Order.id.desc()).all()
-    return orders
+    return db.query(models.Order).order_by(models.Order.id.desc()).all()
 
 
 @app.patch(
     "/orders/{order_id}/collect",
     response_model=schemas.OrderResponse,
     tags=["Botica / Punto de Venta"],
-    summary="Cobro presencial en caja y entrega en botica (Slide 9 BPMN)"
+    summary="Confirmar entrega en botica (y cobro presencial si corresponde)",
 )
 def mark_order_collected(order_id: int, db: Session = Depends(get_db)):
-    """
-    Simula la acción en mostrador físico:
-    El cliente presenta el código de recojo, paga en caja (efectivo o POS)
-    y el farmacéutico despacha los medicamentos, marcando la orden como COLLECTED.
-    """
     order = db.query(models.Order).filter(models.Order.id == order_id).first()
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Orden con ID {order_id} no encontrada."
+            detail=f"Orden con ID {order_id} no encontrada.",
         )
 
     if order.status == models.OrderStatus.COLLECTED.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La orden ya ha sido entregada y liquidada previamente."
+            detail="La orden ya ha sido entregada previamente.",
+        )
+
+    if order.status == models.OrderStatus.CANCELLED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede entregar una orden que fue cancelada.",
         )
 
     order.status = models.OrderStatus.COLLECTED.value
+    if order.payment_status == "PENDING_IN_STORE":
+        order.payment_status = "PAID_IN_STORE"
+
     db.commit()
     db.refresh(order)
     return order
@@ -267,32 +339,50 @@ def mark_order_collected(order_id: int, db: Session = Depends(get_db)):
     "/orders/{order_id}/cancel",
     response_model=schemas.OrderResponse,
     tags=["Botica / Punto de Venta"],
-    summary="Cancelar reserva y reponer existencias (Rollback compensatorio)"
+    summary="Cancelar pedido, reponer existencias y reembolsar pago online si aplica",
 )
 def cancel_order(order_id: int, db: Session = Depends(get_db)):
-    """
-    Cancela una reserva y devuelve de forma automática el stock al Catálogo.
-    """
     order = db.query(models.Order).filter(models.Order.id == order_id).first()
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Orden con ID {order_id} no encontrada."
+            detail=f"Orden con ID {order_id} no encontrada.",
         )
 
     if order.status == models.OrderStatus.CANCELLED.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La orden ya se encuentra cancelada."
+            detail="La orden ya se encuentra cancelada.",
         )
 
-    # Liberar stock en Catalog Service si estaba reservado
-    if order.status in [models.OrderStatus.RESERVED.value, models.OrderStatus.PENDING.value]:
+    if order.status == models.OrderStatus.COLLECTED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede cancelar una orden que ya fue entregada en botica.",
+        )
+
+    if order.status in [
+        models.OrderStatus.RESERVED.value,
+        models.OrderStatus.PAID.value,
+        models.OrderStatus.PENDING.value,
+    ]:
         for item in order.items:
-            catalog_client.release_stock(item.product_id, item.quantity)
+            catalog_client.release_stock(
+                item.product_id,
+                item.quantity,
+                branch_id=order.branch_id,
+            )
+
+    if order.payment_id and order.payment_status == "PAID_ONLINE":
+        payments_client.refund(
+            order.payment_id,
+            f"Cancelación de pedido {order.pickup_code or order.id}",
+        )
+        order.payment_status = "REFUNDED"
+    else:
+        order.payment_status = "CANCELLED"
 
     order.status = models.OrderStatus.CANCELLED.value
     db.commit()
     db.refresh(order)
     return order
-

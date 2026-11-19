@@ -21,5 +21,10 @@ CREATE DATABASE IF NOT EXISTS `db_pedidos_inka`
   CHARACTER SET utf8mb4 
   COLLATE utf8mb4_unicode_ci;
 
+-- 4. Base de datos para el Microservicio de Pagos Online (Puerto 8004)
+CREATE DATABASE IF NOT EXISTS `db_pagos_inka` 
+  CHARACTER SET utf8mb4 
+  COLLATE utf8mb4_unicode_ci;
+
 -- Verificación de bases de datos creadas
 SHOW DATABASES LIKE '%inka%';

@@ -10,14 +10,16 @@ from database import Base
 
 class OrderStatus(str, enum.Enum):
     """
-    Ciclo de vida transaccional Click & Collect (Slides 2, 7, 8, 9, 12):
-    - RESERVED: Reserva digital confirmada con bloqueo atómico de existencias.
-    - COLLECTED: Retirado y liquidado presencialmente en botica física (caja).
-    - CANCELLED: Reserva cancelada / compensada con reposición de inventario.
+    Ciclo de vida transaccional de reservas y pedidos:
+    - RESERVED: Reserva digital confirmada con bloqueo de stock (pago presencial en botica).
+    - PAID: Pedido pagado online con bloqueo de stock confirmado, listo para recojo en botica.
+    - COLLECTED: Retirado y liquidado/entregado en botica física.
+    - CANCELLED: Reserva o pedido cancelado con reposición de inventario (y reembolso si fue pago online).
     - PENDING: Reserva en proceso.
     - COMPLETED: Completado (compatibilidad histórica).
     """
     RESERVED = "RESERVED"
+    PAID = "PAID"
     COLLECTED = "COLLECTED"
     CANCELLED = "CANCELLED"
     PENDING = "PENDING"
@@ -48,10 +50,16 @@ class Order(Base):
     total_amount = Column(Numeric(10, 2), nullable=False, default=0.00)
     
     # Sede de la botica física asignada para el recojo presencial
-    branch = Column(String(150), nullable=True, default="Sede Inkafarma - Miraflores (Av. Larco 450)")
+    branch_id = Column(Integer, nullable=False, default=1, index=True)
+    branch = Column(String(150), nullable=True, default="Inkafarma Miraflores (Av. Larco 450)")
 
-    # Modalidad de liquidación (Cero pasarelas virtuales: pago en efectivo o POS en tienda)
+    # Modalidad de liquidación (PAGO_EN_CAJA_PRESENCIAL o PAGO_ONLINE)
     payment_method = Column(String(50), nullable=True, default="PAGO_EN_CAJA_PRESENCIAL")
+
+    # Trazabilidad de pago online (cuando se procesa vía payments_service :8004)
+    payment_id = Column(Integer, nullable=True, index=True)
+    payment_reference = Column(String(60), nullable=True, index=True)
+    payment_status = Column(String(30), nullable=False, default="PENDING_IN_STORE")
 
     # Estado de la orden (almacenado como String para máxima compatibilidad DDL)
     status = Column(String(50), nullable=False, default=OrderStatus.RESERVED.value)

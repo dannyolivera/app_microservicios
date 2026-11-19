@@ -21,6 +21,7 @@ export default function Navbar({
   searchTerm,
   setSearchTerm,
   health,
+  selectedBranchId = 1,
   selectedBranch,
   onChangeBranch,
   branches = [],
@@ -29,7 +30,8 @@ export default function Navbar({
   onSelectCategory,
   onOpenReservations,
 }) {
-  const isOnline = health.catalog && health.users && health.orders;
+  const isOnline =
+    health.catalog && health.users && health.orders && health.payments !== false;
 
   const handleResetHome = () => {
     setSearchTerm("");
@@ -59,13 +61,17 @@ export default function Navbar({
                 <MapPin className="w-3 h-3 text-inkafarma-yellow shrink-0" />
                 <select
                   aria-label="Botica de recojo"
-                  value={selectedBranch}
-                  onChange={(e) => onChangeBranch(e.target.value)}
+                  value={selectedBranchId}
+                  onChange={(e) => onChangeBranch(Number(e.target.value))}
                   className="bg-transparent text-white text-[11px] font-semibold outline-none cursor-pointer max-w-[200px] sm:max-w-none truncate"
                 >
                   {branches.map((branch) => (
-                    <option key={branch} value={branch} className="text-slate-900 bg-white">
-                      {branch}
+                    <option
+                      key={branch.id}
+                      value={branch.id}
+                      className="text-slate-900 bg-white"
+                    >
+                      {branch.name}
                     </option>
                   ))}
                 </select>

@@ -2,13 +2,10 @@ from typing import List, Optional
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
-from models import OrderStatus
 
 # =============================================================================
 # ESQUEMAS PYDANTIC (VALIDACIÓN Y SERIALIZACIÓN - PEDIDOS Y ÓRDENES)
 # =============================================================================
-
-# --- Esquemas de Ítems del Pedido ---
 
 class OrderItemBase(BaseModel):
     """Atributos base de un ítem de orden."""
@@ -30,30 +27,57 @@ class OrderItemResponse(OrderItemBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# --- Esquemas de la Orden Principal ---
+class OnlinePaymentDetails(BaseModel):
+    """Datos enviados al microservicio de pagos cuando payment_method=PAGO_ONLINE."""
+    method_type: str = Field("CARD", description="CARD o YAPE")
+    email: Optional[str] = Field(None, max_length=150)
+    card_number: Optional[str] = None
+    card_holder: Optional[str] = None
+    exp_month: Optional[int] = Field(None, ge=1, le=12)
+    exp_year: Optional[int] = Field(None, ge=0, le=9999)
+    cvv: Optional[str] = None
+    yape_phone: Optional[str] = None
+    yape_code: Optional[str] = None
+    culqi_token: Optional[str] = None
+
 
 class OrderCreate(BaseModel):
     """
-    Esquema para crear una nueva reserva Click & Collect.
-    Requiere el ID del usuario, lista de medicamentos y sede física seleccionada.
+    Esquema para crear una reserva o pedido para retiro en botica.
+    Soporta pago presencial en caja o pago online mediante payments_service.
     """
     user_id: int = Field(..., gt=0, description="ID del usuario cliente (Microservicio de Usuarios)")
     items: List[OrderItemCreate] = Field(..., min_length=1, description="Lista de productos a incluir en la orden")
-    branch: Optional[str] = Field("Sede Inkafarma - Miraflores (Av. Larco 450)", description="Sede botica física para el recojo")
+    branch_id: int = Field(1, gt=0, description="ID de la botica cuyo inventario se descontará")
+    branch: Optional[str] = Field(
+        "Inkafarma Miraflores (Av. Larco 450)",
+        description="Nombre de la sede botica física para el recojo",
+    )
+    payment_method: str = Field(
+        "PAGO_EN_CAJA_PRESENCIAL",
+        description="Modalidad: PAGO_EN_CAJA_PRESENCIAL o PAGO_ONLINE",
+    )
+    payment_details: Optional[OnlinePaymentDetails] = Field(
+        None,
+        description="Detalle del medio de pago cuando payment_method=PAGO_ONLINE",
+    )
 
 
 class OrderResponse(BaseModel):
     """
-    Esquema detallado del ticket de reserva Click & Collect.
-    Incluye el código único de recojo y la sede de atención.
+    Esquema detallado del ticket de retiro en botica.
     """
     id: int = Field(..., description="Identificador único de la orden")
-    pickup_code: Optional[str] = Field(None, description="Código alfanumérico único para retirar en botica (Slide 2 y 12)")
+    pickup_code: Optional[str] = Field(None, description="Código alfanumérico único para retirar en botica")
     user_id: int = Field(..., description="ID del usuario que realizó el pedido")
-    total_amount: Decimal = Field(..., description="Monto total a pagar en caja física")
+    total_amount: Decimal = Field(..., description="Monto total del pedido")
+    branch_id: Optional[int] = Field(None, description="ID de sede de retiro")
     branch: Optional[str] = Field(None, description="Sede de retiro asignada")
-    payment_method: Optional[str] = Field(None, description="Modalidad de pago presencial")
-    status: str = Field(..., description="Estado de la orden (RESERVED, COLLECTED, CANCELLED)")
+    payment_method: Optional[str] = Field(None, description="Modalidad de pago elegida")
+    payment_id: Optional[int] = Field(None, description="ID de transacción en payments_service")
+    payment_reference: Optional[str] = Field(None, description="Código de operación de la pasarela")
+    payment_status: Optional[str] = Field(None, description="Estado de pago: PENDING_IN_STORE, PAID_ONLINE, PAID_IN_STORE, REFUNDED")
+    status: str = Field(..., description="Estado de la orden (RESERVED, PAID, COLLECTED, CANCELLED)")
     created_at: datetime = Field(..., description="Fecha y hora de registro")
     items: List[OrderItemResponse] = Field(default_factory=list, description="Lista de ítems asociados al pedido")
 

@@ -6,9 +6,18 @@ export const API_ENDPOINTS = {
   CATALOG: "http://localhost:8001",
   USERS: "http://localhost:8002",
   ORDERS: "http://localhost:8003",
+  PAYMENTS: "http://localhost:8004",
 };
 
 // --- MICROSERVICIO 1: CATÁLOGO (PUERTO 8001) ---
+
+export async function getBranches() {
+  const response = await fetch(`${API_ENDPOINTS.CATALOG}/branches/`);
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}: No se pudo obtener las boticas`);
+  }
+  return response.json();
+}
 
 export async function getCategories() {
   const response = await fetch(`${API_ENDPOINTS.CATALOG}/categories/`);
@@ -18,16 +27,20 @@ export async function getCategories() {
   return response.json();
 }
 
-export async function getProducts(skip = 0, limit = 50) {
-  const response = await fetch(`${API_ENDPOINTS.CATALOG}/products/?skip=${skip}&limit=${limit}`);
+export async function getProducts(skip = 0, limit = 50, branchId = null) {
+  const branchParam = branchId ? `&branch_id=${branchId}` : "";
+  const response = await fetch(
+    `${API_ENDPOINTS.CATALOG}/products/?skip=${skip}&limit=${limit}${branchParam}`
+  );
   if (!response.ok) {
     throw new Error(`Error ${response.status}: No se pudo cargar los productos`);
   }
   return response.json();
 }
 
-export async function getProductById(id) {
-  const response = await fetch(`${API_ENDPOINTS.CATALOG}/products/${id}`);
+export async function getProductById(id, branchId = null) {
+  const branchParam = branchId ? `?branch_id=${branchId}` : "";
+  const response = await fetch(`${API_ENDPOINTS.CATALOG}/products/${id}${branchParam}`);
   if (!response.ok) {
     throw new Error(`Error ${response.status}: Producto no encontrado`);
   }
@@ -122,11 +135,12 @@ export async function checkMicroservicesHealth() {
     }
   };
 
-  const [catalog, users, orders] = await Promise.all([
+  const [catalog, users, orders, payments] = await Promise.all([
     checkService(`${API_ENDPOINTS.CATALOG}/`),
     checkService(`${API_ENDPOINTS.USERS}/`),
     checkService(`${API_ENDPOINTS.ORDERS}/`),
+    checkService(`${API_ENDPOINTS.PAYMENTS}/`),
   ]);
 
-  return { catalog, users, orders };
+  return { catalog, users, orders, payments };
 }

@@ -44,8 +44,12 @@ def ensure_orders_schema():
     """
     statements = [
         "ALTER TABLE orders ADD COLUMN pickup_code VARCHAR(50) NULL UNIQUE",
-        "ALTER TABLE orders ADD COLUMN branch VARCHAR(150) NULL DEFAULT 'Sede Inkafarma - Miraflores (Av. Larco 450)'",
+        "ALTER TABLE orders ADD COLUMN branch_id INT NOT NULL DEFAULT 1",
+        "ALTER TABLE orders ADD COLUMN branch VARCHAR(150) NULL DEFAULT 'Inkafarma Miraflores (Av. Larco 450)'",
         "ALTER TABLE orders ADD COLUMN payment_method VARCHAR(50) NULL DEFAULT 'PAGO_EN_CAJA_PRESENCIAL'",
+        "ALTER TABLE orders ADD COLUMN payment_id INT NULL",
+        "ALTER TABLE orders ADD COLUMN payment_reference VARCHAR(60) NULL",
+        "ALTER TABLE orders ADD COLUMN payment_status VARCHAR(30) NOT NULL DEFAULT 'PENDING_IN_STORE'",
         "ALTER TABLE orders MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'RESERVED'"
     ]
     try:
