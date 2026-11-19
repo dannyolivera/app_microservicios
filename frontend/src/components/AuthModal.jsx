@@ -67,7 +67,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
       <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden animate-fade-in">
         {/* Cabecera Limpia */}
-        <div className="p-6 bg-gradient-to-r from-inkafarma-green to-inkafarma-greenDark text-white relative">
+        <div className="p-6 bg-gradient-to-r from-[#008446] to-[#005E32] text-white relative">
           <button
             onClick={onClose}
             className="absolute right-4 top-4 text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
@@ -76,17 +76,17 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
           </button>
           
           <img
-            src="/inkafarma-logo.png"
+            src="/inkafarma-logo-white.svg"
             alt="Inkafarma"
-            className="h-8 w-auto brightness-0 invert mb-2"
+            className="h-7 w-auto mb-2.5"
           />
           <h3 className="text-lg font-black tracking-tight">
             {isRegister ? "Crea tu cuenta de cliente" : "Te damos la bienvenida"}
           </h3>
           <p className="text-xs text-emerald-100 mt-0.5">
             {isRegister
-              ? "Ingresa tus datos para registrar tus pedidos y recetas"
-              : "Inicia sesión para continuar con tu compra farmacéutica"}
+              ? "Ingresa tus datos para gestionar tus reservas y retiros en botica"
+              : "Inicia sesión para confirmar tu reserva y retiro en botica"}
           </p>
         </div>
 

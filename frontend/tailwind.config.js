@@ -8,16 +8,16 @@ export default {
     extend: {
       colors: {
         inkafarma: {
-          green: "#00A650",
-          greenHover: "#008E44",
-          greenDark: "#006F35",
-          greenLight: "#E8F8F0",
-          greenBg: "#F2FBF6",
+          green: "#008446",
+          greenHover: "#006F3B",
+          greenDark: "#005E32",
+          greenLight: "#E7F6EE",
+          greenBg: "#F3FAF6",
           red: "#E30613",
           redHover: "#C50510",
           yellow: "#FFD200",
-          yellowHover: "#E6BC00",
-          dark: "#1A2E22",
+          yellowHover: "#F0C400",
+          dark: "#14291E",
           slate: "#4A5568",
         }
       },

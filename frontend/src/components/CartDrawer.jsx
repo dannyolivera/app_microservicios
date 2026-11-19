@@ -39,14 +39,14 @@ export default function CartDrawer({
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
         <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between">
           {/* Cabecera del Carrito */}
-          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-[#F6F8F7]">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-inkafarma-green text-white flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#008446] text-white flex items-center justify-center">
                 <Store className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="font-bold text-slate-800 text-base leading-tight">Mi Pedido para Botica</h2>
-                <p className="text-[11px] text-emerald-700 font-semibold">
+                <h2 className="font-extrabold text-slate-900 text-base leading-tight">Mi Pedido para Botica</h2>
+                <p className="text-[11px] text-[#008446] font-semibold">
                   {items.reduce((acc, i) => acc + i.quantity, 0)} {items.reduce((acc, i) => acc + i.quantity, 0) === 1 ? 'producto' : 'productos'} para recojo en botica
                 </p>
               </div>
@@ -133,7 +133,7 @@ export default function CartDrawer({
 
           {/* Pie del Carrito y Botón de Reserva Click & Collect */}
           {items.length > 0 && (
-            <div className="p-4 sm:p-5 border-t border-slate-200 bg-slate-50 space-y-3">
+            <div className="p-4 sm:p-5 border-t border-slate-200 bg-[#F6F8F7] space-y-3">
               {/* Selección de Botica para Retiro */}
               <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs space-y-1.5 shadow-2xs">
                 <div className="flex items-center justify-between text-slate-700 font-bold">
@@ -203,7 +203,7 @@ export default function CartDrawer({
                 </div>
                 <div className="flex justify-between text-base font-black text-slate-900 pt-1.5 border-t border-slate-200">
                   <span>Total a pagar en botica:</span>
-                  <span className="text-inkafarma-green">S/ {totalAmount.toFixed(2)}</span>
+                  <span className="text-[#007A43]">S/ {totalAmount.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -211,7 +211,7 @@ export default function CartDrawer({
               <button
                 onClick={user ? onCheckout : onOpenAuth}
                 disabled={isProcessing}
-                className="w-full py-3.5 px-4 bg-inkafarma-green hover:bg-inkafarma-greenHover active:scale-[0.99] text-white rounded-xl font-bold text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3.5 px-4 bg-[#007A43] hover:bg-[#006437] active:scale-[0.99] text-white rounded-xl font-bold text-sm shadow-md shadow-emerald-700/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isProcessing ? (
                   <>

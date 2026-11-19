@@ -1,14 +1,16 @@
 import React, { useState } from "react";
-import { CheckCircle2, PackageCheck, ArrowRight, Store, Copy, Check, QrCode, Coins, CheckCircle, Clock } from "lucide-react";
+import { CheckCircle2, PackageCheck, ArrowRight, Store, Copy, Check, QrCode, Coins, CheckCircle } from "lucide-react";
 import { markOrderCollected } from "../services/api";
 
 export default function OrderSuccessModal({ order, onClose, onOrderUpdated }) {
   const [copied, setCopied] = useState(false);
   const [isSimulatingPickup, setIsSimulatingPickup] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState(order?.status || "RESERVED");
+  const [collectedOrderId, setCollectedOrderId] = useState(null);
 
   if (!order) return null;
 
+  const currentStatus =
+    collectedOrderId === order.id ? "COLLECTED" : order.status || "RESERVED";
   const pickupCode = order.pickup_code || `INKA-CC-${String(order.id).padStart(5, "0")}`;
   const branchName = order.branch || "Sede Inkafarma - Miraflores (Av. Larco 450)";
 
@@ -22,7 +24,7 @@ export default function OrderSuccessModal({ order, onClose, onOrderUpdated }) {
     setIsSimulatingPickup(true);
     try {
       await markOrderCollected(order.id);
-      setCurrentStatus("COLLECTED");
+      setCollectedOrderId(order.id);
       if (onOrderUpdated) onOrderUpdated();
     } catch (err) {
       alert("Error al simular retiro en caja: " + err.message);
@@ -35,7 +37,7 @@ export default function OrderSuccessModal({ order, onClose, onOrderUpdated }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
       <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden animate-fade-in max-h-[92vh] flex flex-col">
         {/* Cabecera exitosa */}
-        <div className="p-6 bg-gradient-to-r from-inkafarma-green to-inkafarma-greenDark text-white text-center shrink-0">
+        <div className="p-6 bg-gradient-to-r from-[#008446] to-[#005E32] text-white text-center shrink-0">
           <div className="w-14 h-14 mx-auto mb-2.5 rounded-full bg-white/20 flex items-center justify-center shadow-inner">
             <CheckCircle2 className="w-8 h-8 text-white stroke-[2.5]" />
           </div>
@@ -149,7 +151,7 @@ export default function OrderSuccessModal({ order, onClose, onOrderUpdated }) {
             <div>
               <p className="font-bold">Instrucciones de Retiro:</p>
               <p className="text-[11px] text-amber-800 mt-0.5">
-                Acércate a la zona de <strong>Caja / Entrega de Pedidos</strong> de la botica, indica tu código <strong>{pickupCode}</strong> y realiza tu pago en efectivo o con tarjeta. Tus medicamentos están reservados por 24 horas.
+                Acércate a la zona de <strong>Caja / Entrega de Pedidos</strong> de la botica, indica tu código <strong>{pickupCode}</strong> y realiza tu pago en efectivo o con tarjeta. Tus medicamentos quedaron apartados y listos para retiro en la botica seleccionada.
               </p>
             </div>
           </div>
@@ -161,14 +163,14 @@ export default function OrderSuccessModal({ order, onClose, onOrderUpdated }) {
               disabled={isSimulatingPickup}
               className="w-full py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors flex items-center justify-center gap-1.5"
             >
-              <CheckCircle className="w-3.5 h-3.5 text-inkafarma-green" />
+              <CheckCircle className="w-3.5 h-3.5 text-[#008446]" />
               <span>{isSimulatingPickup ? "Registrando entrega..." : "Simular Entrega y Pago en Botica"}</span>
             </button>
           )}
 
           <button
             onClick={onClose}
-            className="w-full py-3.5 px-4 bg-inkafarma-green hover:bg-inkafarma-greenHover text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-4 bg-[#007A43] hover:bg-[#006437] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-700/20 transition-all flex items-center justify-center gap-2"
           >
             <span>Finalizar y Volver al Catálogo</span>
             <ArrowRight className="w-4 h-4" />

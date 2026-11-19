@@ -7,8 +7,16 @@
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    @apply bg-slate-50 text-slate-800 antialiased min-h-screen;
+    @apply bg-[#F6F8F7] text-slate-800 antialiased min-h-screen;
   }
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* Animaciones suaves */
